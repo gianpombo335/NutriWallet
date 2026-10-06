@@ -1,21 +1,45 @@
 # NutriWallet
 
-NutriWallet is a connected Flutter app for planning meals around a real food budget. It includes Supabase email authentication, profile setup, a dish library, cloud nutrition and vision services, allergy-aware meal planning, budget tracking, reminders, and authenticated synchronization. A local database is retained as the device cache for the signed-in account.
+NutriWallet is a connected Flutter app for planning meals around nutrition goals and a real food budget. It combines a personal dish library, nutrition enrichment, allergy-aware planning, budget tracking, meal check-ins, reminders, and Supabase-backed synchronization.
 
-## Run The App
+The app uses Drift/SQLite as a local-first cache and durable outbound sync queue for the signed-in account. It is not a standalone offline app: Supabase configuration is required at startup, and nutrition lookup, image recognition, smart-plan recommendations, authentication, and synchronization use connected services.
+
+## Features
+
+- Email/password authentication with confirmation and resend flows.
+- Onboarding and editable nutrition, activity, budget, and planning profiles.
+- Manual dish creation and editing with ingredient nutrition enrichment.
+- Camera, gallery, menu, and receipt recognition through an authenticated Gemini proxy.
+- Profile-level allergy and ingredient exclusions with hard planner filtering.
+- AI-assisted weekly meal planning with deterministic local validation and fallback planning.
+- Versioned plan history, active-plan selection, serving adjustment, and meal check-ins.
+- Planned-versus-actual budget tracking with USD, PHP, EUR, GBP, and JPY display formats.
+- Local reminder scheduling and weekly background plan regeneration.
+- Durable outbound sync with connectivity retry and timestamp-based conflict handling.
+
+## Platform Status
+
+| Platform | Configuration | Validation status |
+| --- | --- | --- |
+| Android API 24+ | Configured | Android API 36 emulator build and connected smoke flow validated; physical-device and broad-version coverage remain open. |
+| iOS 15+ | Configured with camera, photo-library, notification, and background-task metadata | Compatibility is technically supported by the project configuration, but iOS has not been built or runtime-tested. macOS and Xcode are required for validation. |
+
+Android is currently the only platform tested. Do not treat the iOS configuration as tested support until an iOS build and device or simulator smoke test have passed.
+
+## Setup
 
 Requirements:
 
-- Flutter 3.47 or newer on the stable channel
-- Dart 3.13 or newer
-- Android API 26+ or iOS 15+
+- Flutter 3.47.5 or newer on the stable channel.
+- Dart 3.13 or newer.
+- Android API 24+ or iOS 15+.
+- A configured Supabase project with the required Edge Functions and provider secrets.
+
+Install dependencies and generate Drift sources:
 
 ```text
 flutter pub get
-dart run build_runner build
-flutter analyze
-flutter test
-flutter run --dart-define=SUPABASE_URL=https://project.supabase.co --dart-define=SUPABASE_ANON_KEY=...
+dart run build_runner build --delete-conflicting-outputs
 ```
 
 Every app build requires the Supabase project URL and publishable key through Dart defines:
@@ -25,40 +49,67 @@ flutter run --dart-define=SUPABASE_URL=https://project.supabase.co --dart-define
 flutter build apk --release --dart-define=SUPABASE_URL=https://project.supabase.co --dart-define=SUPABASE_ANON_KEY=...
 ```
 
-For a local Windows release build, set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and
-the four `NUTRIWALLET_*` signing variables as environment variables, then run
-`./build_release.ps1`. The script refuses to build an artifact when configuration
-or production signing is missing, and validates the APK signature and checksum.
+The app displays a configuration error instead of starting when either define is missing. Third-party provider keys must remain server-side in Supabase Edge Functions.
 
-The app fails at startup when either define is missing. Authentication, nutrition lookup, vision recognition, smart-plan recommendations, and synchronization use the deployed Supabase services.
+For a production Android release on Windows, set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and these signing variables:
+
+- `NUTRIWALLET_KEYSTORE_PATH`
+- `NUTRIWALLET_KEYSTORE_PASSWORD`
+- `NUTRIWALLET_KEY_ALIAS`
+- `NUTRIWALLET_KEY_PASSWORD`
+
+Then run `./build_release.ps1`. The script refuses missing production signing configuration and validates the generated APK signature or App Bundle structure.
 
 ## Architecture
 
-- `lib/core`: design tokens, theme, providers, and routing.
-- `lib/data/local`: Drift tables and DAOs. Writes happen here first.
-- `lib/data/repositories`: authenticated profile, dish, budget, and generated-plan use cases.
-- `lib/data/remote`: Supabase proxy services and authenticated synchronization.
-- `lib/features`: onboarding, auth, profile setup, dish library, home shell, budget, planner, and settings screens.
-- `test/unit` and `test/widget`: Phase 1 behavior and regression coverage.
+- `lib/core`: design tokens, theme, providers, routing, and shared utilities.
+- `lib/data/local`: Drift tables, migrations, DAOs, and the local cache.
+- `lib/data/repositories`: profile, dish, plan, budget, and sync use cases.
+- `lib/data/remote`: authenticated Supabase proxy services and sync.
+- `lib/features`: onboarding, authentication, profiles, dishes, planning, budget, notifications, and settings.
+- `test/unit`, `test/widget`, and `test/integration`: automated behavior and regression coverage.
+- `supabase/functions`: authenticated nutrition, vision, smart-plan, and sync Edge Functions.
+- `supabase/migrations`: Postgres schema, RLS policies, and conflict-handling RPCs.
 
-`PLAN.md` contains the complete schema, package plan, architecture decisions, and later build phases.
+## Backend Services
 
-## Remote Services
+Supabase provides email authentication, authenticated Edge Function access, Postgres persistence, row-level security, and synchronization. USDA FoodData Central supplies nutrition lookup through a server-side proxy. Gemini supplies image recognition and smart-plan recommendations through server-side proxies. Provider secrets are never embedded in the Flutter client.
 
-Supabase Auth, Gemini vision, USDA FoodData Central, notifications, background scheduling, and synchronization are separated behind service interfaces.
+## Validation
 
-For connected builds, provide the Supabase project URL and publishable key through Dart defines or an untracked environment wrapper, for example:
+The latest recorded validation includes:
 
 ```text
-flutter run --dart-define=SUPABASE_URL=https://project.supabase.co --dart-define=SUPABASE_ANON_KEY=...
+flutter analyze
+dart run build_runner build
+dart format --output=none --set-exit-if-changed lib test
+flutter test --coverage                  # 55 tests
+flutter build apk --debug
+flutter build apk --release
+flutter build appbundle --release
+npx supabase db lint --linked
+npx supabase functions list               # four expected functions ACTIVE
 ```
 
-Registration and sign-in use Supabase Auth. Sign-up sends an email confirmation link; confirm the address, return to the app, and sign in to continue to profile setup. A resend action is available if needed.
+Connected Android API 36 emulator smoke coverage includes sign-in, profile setup, manual dish creation, USDA nutrition enrichment, photo recognition, Gemini planning, plan history/detail, serving adjustment, budget expenses, notification permission and scheduling, sync, and sign-out/re-login. No fatal application exception was observed in the recorded launch log scan.
 
-Vision and USDA provider keys must remain server-side in Supabase Edge Functions. The Flutter client should call only the proxy interfaces and must never contain third-party provider secrets.
+Release artifacts recorded in the latest validation were debug-signed because no production keystore was configured. The production release script correctly rejects debug signing.
 
 ## Current Limitations
 
-- Photo and menu recognition use the authenticated Gemini proxy; failed requests show a retry state rather than switching providers.
-- Budget entries and the planned-vs-actual chart are implemented; analytics now scopes entries to the active week.
-- Native notifications and weekly Workmanager regeneration are implemented. USDA, Gemini vision, smart-plan, and sync proxy Edge Functions are deployed. Connected Android smoke testing covers the main authenticated flows; real confirmation-email delivery, physical-device validation, iOS validation, and production signing remain pending. Pending device writes remain queued until the authenticated sync endpoint accepts them.
+- iOS has not been built or runtime-tested; macOS and Xcode validation are still required.
+- Android physical-device testing and broader Android-version coverage remain open.
+- Real confirmation-email delivery still needs a mailbox smoke test.
+- Notification delivery and weekly background execution have not been verified; Settings currently schedules a demonstration reminder one minute ahead.
+- Sync currently pushes local changes outbound; remote-to-local pull and merge for new devices are not implemented.
+- Dish photos are stored as local file paths and are not uploaded to Supabase Storage.
+- Recognition requires a network connection and has no native ML Kit fallback.
+- The newest sync conflict-hardening migration requires remote application verification.
+- Production signing, privacy text, accessibility, and large-library performance still need review.
+
+## Documentation
+
+- [`contents.md`](contents.md): authoritative implementation inventory.
+- [`PROGRESS.md`](PROGRESS.md): verification log, known warnings, and remaining work.
+- [`SPRINT.md`](SPRINT.md): ordered sprint and feature summary.
+- [`PLAN.md`](PLAN.md): original implementation plan when present in the working tree or repository history.
