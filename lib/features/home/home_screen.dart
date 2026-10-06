@@ -26,6 +26,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     final profile = ref.watch(currentProfileProvider);
     final currency = ref.watch(currencyProvider);
+    if (profile.isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (profile.hasError || profile.value == null) {
+      return const _ProfileRequiredState();
+    }
     final pages = const [
       DishLibraryScreen(),
       WeeklyPlanScreen(),
@@ -95,6 +101,38 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     'Budget tracker',
     'Settings',
   ];
+}
+
+class _ProfileRequiredState extends StatelessWidget {
+  const _ProfileRequiredState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Finish your profile')),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.page),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.person_outline, size: 56),
+              const SizedBox(height: 16),
+              const Text(
+                'Set up your profile before using your dish library and plan.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              FilledButton(
+                onPressed: () => context.go('/setup'),
+                child: const Text('Set up profile'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _DashboardBanner extends StatelessWidget {

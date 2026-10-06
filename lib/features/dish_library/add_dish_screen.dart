@@ -4,11 +4,14 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/constants/app_spacing.dart';
 import '../../core/providers.dart';
+import '../../data/local/database.dart';
 import '../../data/repositories/dish_repository.dart';
 import '../../data/remote/nutrition_lookup_service.dart';
 
 class AddDishScreen extends ConsumerStatefulWidget {
-  const AddDishScreen({super.key});
+  const AddDishScreen({this.dishId, super.key});
+
+  final int? dishId;
 
   @override
   ConsumerState<AddDishScreen> createState() => _AddDishScreenState();
@@ -20,6 +23,47 @@ class _AddDishScreenState extends ConsumerState<AddDishScreen> {
   final _cuisineController = TextEditingController();
   final _ingredientsController = TextEditingController();
   bool _saving = false;
+  bool _loadingExisting = false;
+  bool _loadFailed = false;
+  List<Ingredient> _initialIngredients = const [];
+
+  bool get _isEditing => widget.dishId != null;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_isEditing) Future<void>.microtask(_loadExistingDish);
+  }
+
+  Future<void> _loadExistingDish() async {
+    setState(() => _loadingExisting = true);
+    try {
+      final profile = await ref.read(currentProfileProvider.future);
+      if (profile == null) throw StateError('Profile not found.');
+      final repository = ref.read(dishRepositoryProvider);
+      final dish = await repository.findByIdForProfile(
+        profileId: profile.id,
+        dishId: widget.dishId!,
+      );
+      if (dish == null) throw StateError('Dish not found.');
+      final ingredients = await repository.ingredientsForDishForProfile(
+        profileId: profile.id,
+        dishId: dish.id,
+      );
+      if (!mounted) return;
+      _initialIngredients = ingredients;
+      _nameController.text = dish.name;
+      _priceController.text = (dish.priceCents / 100).toStringAsFixed(2);
+      _cuisineController.text = dish.cuisineTag ?? '';
+      _ingredientsController.text = ingredients
+          .map((item) => item.name)
+          .join(', ');
+    } catch (_) {
+      if (mounted) setState(() => _loadFailed = true);
+    } finally {
+      if (mounted) setState(() => _loadingExisting = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -31,10 +75,16 @@ class _AddDishScreenState extends ConsumerState<AddDishScreen> {
   }
 
   Future<void> _save() async {
+    if (_loadingExisting || _loadFailed) return;
     final name = _nameController.text.trim();
     final price = double.tryParse(_priceController.text.trim());
     final profile = ref.read(currentProfileProvider).value;
-    if (name.isEmpty || price == null || price < 0 || profile == null) {
+    if (name.isEmpty ||
+        price == null ||
+        !price.isFinite ||
+        price < 0 ||
+        price > 1000000 ||
+        profile == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Add a dish name and a valid price.')),
       );
@@ -50,7 +100,29 @@ class _AddDishScreenState extends ConsumerState<AddDishScreen> {
       final nutrition = ref.read(nutritionLookupServiceProvider);
       final enrichedIngredients = <IngredientDraft>[];
       var lookupFailed = false;
-      for (final ingredientName in ingredientNames) {
+      final normalizedInitial = {
+        for (final ingredient in _initialIngredients)
+          ingredient.name.trim().toLowerCase(): ingredient,
+      };
+      final seenNames = <String>{};
+      for (final rawIngredientName in ingredientNames) {
+        final ingredientName = rawIngredientName.trim();
+        final normalizedIngredientName = ingredientName.toLowerCase();
+        if (!seenNames.add(normalizedIngredientName)) continue;
+        final unchanged = normalizedInitial[normalizedIngredientName];
+        if (unchanged != null) {
+          enrichedIngredients.add(
+            IngredientDraft(
+              existingId: unchanged.id,
+              name: ingredientName,
+              calories: unchanged.calories,
+              proteinG: unchanged.proteinG,
+              carbsG: unchanged.carbsG,
+              fatG: unchanged.fatG,
+            ),
+          );
+          continue;
+        }
         NutritionProfile? nutritionProfile;
         try {
           nutritionProfile = await nutrition.lookup(ingredientName);
@@ -67,15 +139,25 @@ class _AddDishScreenState extends ConsumerState<AddDishScreen> {
           ),
         );
       }
-      await ref
-          .read(dishRepositoryProvider)
-          .createDish(
-            profileId: profile.id,
-            name: name,
-            priceCents: (price * 100).round(),
-            cuisineTag: _cuisineController.text,
-            ingredients: enrichedIngredients,
-          );
+      final repository = ref.read(dishRepositoryProvider);
+      if (_isEditing) {
+        await repository.updateDish(
+          profileId: profile.id,
+          dishId: widget.dishId!,
+          name: name,
+          priceCents: (price * 100).round(),
+          cuisineTag: _cuisineController.text,
+          ingredients: enrichedIngredients,
+        );
+      } else {
+        await repository.createDish(
+          profileId: profile.id,
+          name: name,
+          priceCents: (price * 100).round(),
+          cuisineTag: _cuisineController.text,
+          ingredients: enrichedIngredients,
+        );
+      }
       if (!mounted) return;
       if (lookupFailed) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -84,7 +166,7 @@ class _AddDishScreenState extends ConsumerState<AddDishScreen> {
           ),
         );
       }
-      context.pop();
+      context.pop(true);
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -99,19 +181,36 @@ class _AddDishScreenState extends ConsumerState<AddDishScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Add dish')),
+      appBar: AppBar(title: Text(_isEditing ? 'Edit dish' : 'Add dish')),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.page),
         children: [
           Text(
-            'Keep it simple',
+            _isEditing ? 'Keep your dish up to date' : 'Keep it simple',
             style: Theme.of(context).textTheme.headlineMedium,
           ),
           const SizedBox(height: 8),
-          const Text(
-            'You can add nutrition details later. A name and price are enough to start planning.',
+          Text(
+            _isEditing
+                ? 'Update the name, price, or ingredients. Existing nutrition data is kept when ingredients stay the same.'
+                : 'You can add nutrition details later. A name and price are enough to start planning.',
           ),
           const SizedBox(height: 24),
+          if (_loadingExisting)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 20),
+              child: LinearProgressIndicator(),
+            ),
+          if (_loadFailed)
+            Card(
+              color: Theme.of(context).colorScheme.errorContainer,
+              child: const Padding(
+                padding: EdgeInsets.all(12),
+                child: Text(
+                  'This dish could not be loaded. Go back and try again.',
+                ),
+              ),
+            ),
           TextField(
             controller: _nameController,
             textCapitalization: TextCapitalization.words,
@@ -149,17 +248,21 @@ class _AddDishScreenState extends ConsumerState<AddDishScreen> {
           ),
           const SizedBox(height: 28),
           FilledButton(
-            onPressed: _saving ? null : _save,
+            onPressed: _saving || _loadingExisting || _loadFailed
+                ? null
+                : _save,
             child: _saving
                 ? const CircularProgressIndicator()
-                : const Text('Save dish'),
+                : Text(_isEditing ? 'Update dish' : 'Save dish'),
           ),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: () => context.push('/dishes/capture'),
-            icon: const Icon(Icons.photo_camera_outlined),
-            label: const Text('Recognize from a photo'),
-          ),
+          if (!_isEditing) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => context.push('/dishes/capture'),
+              icon: const Icon(Icons.photo_camera_outlined),
+              label: const Text('Recognize from a photo'),
+            ),
+          ],
         ],
       ),
     );

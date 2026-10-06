@@ -80,8 +80,12 @@ class MealPlanRepository {
                 dayIndex: assignment.dayIndex,
                 slotIndex: assignment.slotIndex,
                 dishId: assignment.dish.id,
-                plannedCostCents: assignment.dish.roundedPriceCents,
-                plannedCalories: Value(assignment.dish.calories),
+                plannedCostCents: assignment.plannedCostCents,
+                plannedCalories: Value(assignment.nutrition.calories),
+                plannedProteinG: Value(assignment.nutrition.proteinG),
+                plannedCarbsG: Value(assignment.nutrition.carbsG),
+                plannedFatG: Value(assignment.nutrition.fatG),
+                servings: Value(assignment.servings),
               ),
             );
         await queue.enqueue(
@@ -94,8 +98,12 @@ class MealPlanRepository {
             'dish_id': assignment.dish.id,
             'day_index': assignment.dayIndex,
             'slot_index': assignment.slotIndex,
-            'planned_cost_cents': assignment.dish.roundedPriceCents,
-            'planned_calories': assignment.dish.calories,
+            'planned_cost_cents': assignment.plannedCostCents,
+            'planned_calories': assignment.nutrition.calories,
+            'planned_protein_g': assignment.nutrition.proteinG,
+            'planned_carbs_g': assignment.nutrition.carbsG,
+            'planned_fat_g': assignment.nutrition.fatG,
+            'servings': assignment.servings,
             'meal_status': 'planned',
           },
           dirtyAt: now,
@@ -188,6 +196,105 @@ class MealPlanRepository {
             ]))
           .get();
 
+  Future<void> updateMealSlotPlan({
+    required int profileId,
+    required int planId,
+    required int dayIndex,
+    required int slotIndex,
+    required PlannerDish dish,
+    required double servings,
+  }) async {
+    if (!servings.isFinite || servings < 0.5) {
+      throw ArgumentError.value(servings, 'servings');
+    }
+    final plan = await findByIdForProfile(planId, profileId);
+    if (plan == null) return;
+    final savedDish = await DishDao(_database).findById(dish.id);
+    if (savedDish == null || savedDish.userProfileId != profileId) return;
+    final slot =
+        await (_database.select(_database.mealSlots)..where(
+              (row) =>
+                  row.generatedPlanId.equals(planId) &
+                  row.dayIndex.equals(dayIndex) &
+                  row.slotIndex.equals(slotIndex),
+            ))
+            .getSingleOrNull();
+    if (slot == null) return;
+
+    final scaledNutrition = dish.nutrition * servings;
+    final plannedCostCents = (dish.roundedPriceCents * servings).round();
+    final changedAt = DateTime.now().toUtc();
+    await _database.transaction(() async {
+      await (_database.update(
+        _database.mealSlots,
+      )..where((row) => row.id.equals(slot.id))).write(
+        MealSlotsCompanion(
+          dishId: Value(dish.id),
+          plannedCostCents: Value(plannedCostCents),
+          plannedCalories: Value(scaledNutrition.calories),
+          plannedProteinG: Value(scaledNutrition.proteinG),
+          plannedCarbsG: Value(scaledNutrition.carbsG),
+          plannedFatG: Value(scaledNutrition.fatG),
+          servings: Value(servings),
+        ),
+      );
+
+      final updatedSlots = await slotsForPlan(planId);
+      final totalCostCents = updatedSlots.fold<int>(
+        0,
+        (sum, item) => sum + item.plannedCostCents,
+      );
+      final profile = await (_database.select(
+        _database.userProfiles,
+      )..where((row) => row.id.equals(profileId))).getSingle();
+      final isOverBudget = totalCostCents > profile.weeklyBudgetCents;
+      await (_database.update(_database.generatedPlans)..where(
+            (row) =>
+                row.id.equals(planId) & row.userProfileId.equals(profileId),
+          ))
+          .write(
+            GeneratedPlansCompanion(
+              totalProjectedCostCents: Value(totalCostCents),
+              isOverBudget: Value(isOverBudget),
+            ),
+          );
+
+      final queue = SyncQueueRepository(_database);
+      await queue.enqueue(
+        entityTable: 'MealSlots',
+        entityId: slot.id,
+        operation: 'update',
+        payload: {
+          'profile_id': profileId,
+          'generated_plan_id': planId,
+          'dish_id': dish.id,
+          'day_index': slot.dayIndex,
+          'slot_index': slot.slotIndex,
+          'planned_cost_cents': plannedCostCents,
+          'planned_calories': scaledNutrition.calories,
+          'planned_protein_g': scaledNutrition.proteinG,
+          'planned_carbs_g': scaledNutrition.carbsG,
+          'planned_fat_g': scaledNutrition.fatG,
+          'servings': servings,
+          'plan_edit': true,
+          'meal_status': slot.mealStatus,
+        },
+        dirtyAt: changedAt,
+      );
+      await queue.enqueue(
+        entityTable: 'GeneratedPlans',
+        entityId: planId,
+        operation: 'update',
+        payload: _planPayload(
+          plan,
+          totalCostCents: totalCostCents,
+          isOverBudget: isOverBudget,
+        ),
+        dirtyAt: changedAt,
+      );
+    });
+  }
+
   Future<void> updateMealSlot({
     required int profileId,
     required int slotId,
@@ -205,6 +312,10 @@ class MealPlanRepository {
             actualCostCents < 0 ||
             substituteName?.trim().isEmpty != false)) {
       throw ArgumentError('Substitute meals require a name and actual cost.');
+    }
+    if (mealStatus == 'eaten' &&
+        (actualCostCents == null || actualCostCents < 0)) {
+      throw ArgumentError('Eaten meals require a non-negative actual cost.');
     }
     if (mealStatus == 'skipped' &&
         (actualCostCents != null || substituteName != null)) {
@@ -238,6 +349,10 @@ class MealPlanRepository {
         'slot_index': slot.slotIndex,
         'planned_cost_cents': slot.plannedCostCents,
         'planned_calories': slot.plannedCalories,
+        'planned_protein_g': slot.plannedProteinG,
+        'planned_carbs_g': slot.plannedCarbsG,
+        'planned_fat_g': slot.plannedFatG,
+        'servings': slot.servings,
         'meal_status': mealStatus,
         'actual_cost_cents': actualCostCents,
         'substitute_name': substituteName,
@@ -254,6 +369,7 @@ class MealPlanRepository {
       final dish = await dishDao.findById(slot.dishId);
       if (dish == null) continue;
       final ingredients = await dishDao.ingredientsForDish(dish.id);
+      final servings = slot.servings <= 0 ? 1.0 : slot.servings;
       assignments.add(
         MealSlotAssignment(
           dayIndex: slot.dayIndex,
@@ -261,14 +377,17 @@ class MealPlanRepository {
           dish: PlannerDish(
             id: dish.id,
             name: dish.name,
-            price: dish.priceCents / 100,
-            calories: ingredients.fold(0, (sum, item) => sum + item.calories),
-            proteinG: ingredients.fold(0, (sum, item) => sum + item.proteinG),
-            carbsG: ingredients.fold(0, (sum, item) => sum + item.carbsG),
-            fatG: ingredients.fold(0, (sum, item) => sum + item.fatG),
+            // Saved slots are snapshots. A later dish edit should not silently
+            // rewrite the historical plan's nutrition or projected cost.
+            price: slot.plannedCostCents / servings / 100,
+            calories: slot.plannedCalories / servings,
+            proteinG: slot.plannedProteinG / servings,
+            carbsG: slot.plannedCarbsG / servings,
+            fatG: slot.plannedFatG / servings,
             ingredients: ingredients.map((item) => item.name).toList(),
           ),
           reason: 'saved active plan',
+          servings: servings,
         ),
       );
     }
@@ -281,15 +400,18 @@ class MealPlanRepository {
 
   Map<String, dynamic> _planPayload(
     GeneratedPlan plan, {
-    required bool isActive,
+    bool? isActive,
+    int? totalCostCents,
+    bool? isOverBudget,
   }) => {
     'profile_id': plan.userProfileId,
     'week_start_date': plan.weekStartDate.toUtc().toIso8601String(),
     'generated_at': plan.generatedAt.toUtc().toIso8601String(),
-    'total_projected_cost_cents': plan.totalProjectedCostCents,
-    'is_over_budget': plan.isOverBudget,
+    'total_projected_cost_cents':
+        totalCostCents ?? plan.totalProjectedCostCents,
+    'is_over_budget': isOverBudget ?? plan.isOverBudget,
     'version': plan.version,
-    'is_active': isActive,
+    'is_active': isActive ?? plan.isActive,
     'planning_focus': plan.planningFocus,
     'currency_code': plan.currencyCode,
   };

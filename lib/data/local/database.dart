@@ -111,6 +111,10 @@ class MealSlots extends Table {
   IntColumn get dishId => integer().references(Dishes, #id)();
   IntColumn get plannedCostCents => integer()();
   RealColumn get plannedCalories => real().withDefault(const Constant(0))();
+  RealColumn get plannedProteinG => real().withDefault(const Constant(0))();
+  RealColumn get plannedCarbsG => real().withDefault(const Constant(0))();
+  RealColumn get plannedFatG => real().withDefault(const Constant(0))();
+  RealColumn get servings => real().withDefault(const Constant(1))();
   TextColumn get mealStatus => text().withDefault(const Constant('planned'))();
   IntColumn get actualCostCents => integer().nullable()();
   TextColumn get substituteName => text().nullable()();
@@ -175,8 +179,22 @@ class AppDatabase extends _$AppDatabase {
         }),
       );
 
+  Future<void> clearAccountData() async {
+    await transaction(() async {
+      await delete(budgetEntries).go();
+      await delete(mealSlots).go();
+      await delete(generatedPlans).go();
+      await delete(ingredients).go();
+      await delete(dishAllergenTags).go();
+      await delete(dishes).go();
+      await delete(allergenTags).go();
+      await delete(userProfiles).go();
+      await delete(syncQueue).go();
+    });
+  }
+
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -206,6 +224,12 @@ class AppDatabase extends _$AppDatabase {
       if (from < 7) {
         await m.addColumn(generatedPlans, generatedPlans.planningFocus);
         await m.addColumn(generatedPlans, generatedPlans.currencyCode);
+      }
+      if (from < 8) {
+        await m.addColumn(mealSlots, mealSlots.plannedProteinG);
+        await m.addColumn(mealSlots, mealSlots.plannedCarbsG);
+        await m.addColumn(mealSlots, mealSlots.plannedFatG);
+        await m.addColumn(mealSlots, mealSlots.servings);
       }
     },
     beforeOpen: (details) async {

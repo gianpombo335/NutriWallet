@@ -12,8 +12,10 @@ class IngredientDraft {
     required this.proteinG,
     required this.carbsG,
     required this.fatG,
+    this.existingId,
   });
 
+  final int? existingId;
   final String name;
   final double calories;
   final double proteinG;
@@ -69,12 +71,14 @@ class DishRepository {
     String source = 'manual',
     String? photoPath,
   }) async {
+    _validateDish(name: name, priceCents: priceCents, ingredients: ingredients);
+    final normalizedName = name.trim();
     return _database.transaction(() async {
       final now = DateTime.now().toUtc();
       final dishId = await _dao.insertDish(
         DishesCompanion.insert(
           userProfileId: profileId,
-          name: name.trim(),
+          name: normalizedName,
           priceCents: priceCents,
           source: Value(source),
           photoPath: Value(photoPath),
@@ -92,7 +96,7 @@ class DishRepository {
         operation: 'insert',
         payload: {
           'profile_id': profileId,
-          'name': name.trim(),
+          'name': normalizedName,
           'price_cents': priceCents,
           'source': source,
           'cuisine_tag': cuisineTag?.trim().isEmpty == true
@@ -135,6 +139,146 @@ class DishRepository {
     });
   }
 
+  Future<Dishe?> findByIdForProfile({
+    required int profileId,
+    required int dishId,
+  }) => _dao.findByIdForProfile(profileId, dishId);
+
+  Future<List<Ingredient>> ingredientsForDishForProfile({
+    required int profileId,
+    required int dishId,
+  }) async {
+    final dish = await _dao.findByIdForProfile(profileId, dishId);
+    if (dish == null) return const [];
+    return _dao.ingredientsForDish(dishId);
+  }
+
+  Future<Dishe> updateDish({
+    required int profileId,
+    required int dishId,
+    required String name,
+    required int priceCents,
+    required List<IngredientDraft> ingredients,
+    String? cuisineTag,
+  }) async {
+    _validateDish(name: name, priceCents: priceCents, ingredients: ingredients);
+    final normalizedName = name.trim();
+    return _database.transaction(() async {
+      final existing = await _dao.findByIdForProfile(profileId, dishId);
+      if (existing == null || existing.isDeleted) {
+        throw StateError('Dish not found.');
+      }
+      final oldIngredients = await _dao.ingredientsForDish(dishId);
+      final retainedIds = <int>{};
+      for (final ingredient in ingredients) {
+        final existingId = ingredient.existingId;
+        if (existingId == null) continue;
+        final old = oldIngredients.where((item) => item.id == existingId);
+        if (old.isEmpty) {
+          throw ArgumentError.value(existingId, 'existingId');
+        }
+        retainedIds.add(existingId);
+      }
+
+      final now = DateTime.now().toUtc();
+      await _dao.updateDish(
+        dishId,
+        DishesCompanion(
+          name: Value(normalizedName),
+          priceCents: Value(priceCents),
+          cuisineTag: Value(
+            cuisineTag?.trim().isEmpty == true ? null : cuisineTag?.trim(),
+          ),
+          updatedAt: Value(now),
+        ),
+      );
+
+      final queue = SyncQueueRepository(_database);
+      await queue.enqueue(
+        entityTable: 'Dishes',
+        entityId: dishId,
+        operation: 'update',
+        payload: {
+          'profile_id': profileId,
+          'name': normalizedName,
+          'price_cents': priceCents,
+          'source': existing.source,
+          'cuisine_tag': cuisineTag?.trim().isEmpty == true
+              ? null
+              : cuisineTag?.trim(),
+          'photo_path': existing.photoPath,
+          'created_at': existing.createdAt.toUtc().toIso8601String(),
+          'updated_at': now.toIso8601String(),
+          'is_deleted': false,
+        },
+        dirtyAt: now,
+      );
+
+      for (final old in oldIngredients) {
+        if (retainedIds.contains(old.id)) continue;
+        await _dao.deleteIngredient(old.id);
+        await queue.enqueue(
+          entityTable: 'Ingredients',
+          entityId: old.id,
+          operation: 'delete',
+          payload: {'profile_id': profileId, 'dish_id': dishId},
+          dirtyAt: now,
+        );
+      }
+
+      for (final ingredient in ingredients) {
+        final normalizedIngredient = ingredient.name.trim();
+        final values = IngredientsCompanion(
+          name: Value(normalizedIngredient),
+          quantity: const Value(1),
+          unit: const Value('serving'),
+          calories: Value(ingredient.calories),
+          proteinG: Value(ingredient.proteinG),
+          carbsG: Value(ingredient.carbsG),
+          fatG: Value(ingredient.fatG),
+          isCachedFromApi: const Value(false),
+        );
+        final existingId = ingredient.existingId;
+        final ingredientId =
+            existingId ??
+            await _dao.insertIngredient(
+              IngredientsCompanion.insert(
+                dishId: dishId,
+                name: normalizedIngredient,
+                quantity: const Value(1),
+                unit: const Value('serving'),
+                calories: Value(ingredient.calories),
+                proteinG: Value(ingredient.proteinG),
+                carbsG: Value(ingredient.carbsG),
+                fatG: Value(ingredient.fatG),
+              ),
+            );
+        if (existingId != null) {
+          await _dao.updateIngredient(existingId, values);
+        }
+        await queue.enqueue(
+          entityTable: 'Ingredients',
+          entityId: ingredientId,
+          operation: existingId == null ? 'insert' : 'update',
+          payload: {
+            'profile_id': profileId,
+            'dish_id': dishId,
+            'name': normalizedIngredient,
+            'quantity': 1,
+            'unit': 'serving',
+            'calories': ingredient.calories,
+            'protein_g': ingredient.proteinG,
+            'carbs_g': ingredient.carbsG,
+            'fat_g': ingredient.fatG,
+            'is_cached_from_api': false,
+          },
+          dirtyAt: now,
+        );
+      }
+      return (await _dao.findById(dishId))!;
+    });
+  }
+
   Future<void> deleteDish({required int profileId, required int dishId}) async {
     final dish = await _dao.findById(dishId);
     if (dish == null || dish.userProfileId != profileId) return;
@@ -145,5 +289,36 @@ class DishRepository {
       operation: 'delete',
       payload: {'profile_id': profileId},
     );
+  }
+
+  void _validateDish({
+    required String name,
+    required int priceCents,
+    required List<IngredientDraft> ingredients,
+  }) {
+    final normalizedName = name.trim();
+    if (normalizedName.isEmpty || normalizedName.length > 200) {
+      throw ArgumentError.value(name, 'name');
+    }
+    if (priceCents < 0 || priceCents > 100000000) {
+      throw ArgumentError.value(priceCents, 'priceCents');
+    }
+    final seenIngredients = <String>{};
+    for (final ingredient in ingredients) {
+      final normalizedIngredient = ingredient.name.trim().toLowerCase();
+      if (normalizedIngredient.isEmpty ||
+          normalizedIngredient.length > 200 ||
+          !seenIngredients.add(normalizedIngredient) ||
+          !ingredient.calories.isFinite ||
+          !ingredient.proteinG.isFinite ||
+          !ingredient.carbsG.isFinite ||
+          !ingredient.fatG.isFinite ||
+          ingredient.calories < 0 ||
+          ingredient.proteinG < 0 ||
+          ingredient.carbsG < 0 ||
+          ingredient.fatG < 0) {
+        throw ArgumentError.value(ingredient, 'ingredients');
+      }
+    }
   }
 }

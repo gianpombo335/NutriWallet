@@ -22,6 +22,12 @@ class PlanHistoryScreen extends ConsumerWidget {
       body: FutureBuilder<List<GeneratedPlan>>(
         future: ref.read(mealPlanRepositoryProvider).history(profile.id),
         builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const Center(child: Text('Could not load plan history.'));
+          }
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
           final plans = snapshot.data ?? const <GeneratedPlan>[];
           if (plans.isEmpty) {
             return const Center(
@@ -94,6 +100,12 @@ class PlanHistoryDetailScreen extends ConsumerWidget {
       body: FutureBuilder<_PlanDetail?>(
         future: _load(ref),
         builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const Center(child: Text('Could not load plan details.'));
+          }
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
           final detail = snapshot.data;
           if (detail == null) {
             return const Center(child: CircularProgressIndicator());

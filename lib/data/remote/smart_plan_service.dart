@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import '../../core/allergy/dish_allergy_matcher.dart';
 import '../../features/meal_planner/domain/planner_models.dart';
 import '../../features/nutrition_goal/domain/nutrition_models.dart';
 
@@ -27,7 +28,13 @@ List<int> validateGeminiDishIds({
       .map((id) => id.toInt())
       .toList();
   final allowedIds = dishes
-      .where((dish) => !_containsExclusion(dish, exclusions))
+      .where(
+        (dish) => !dishMatchesAllergy(
+          dishName: dish.name,
+          ingredients: dish.ingredients,
+          exclusions: exclusions,
+        ),
+      )
       .map((dish) => dish.id)
       .toSet();
   if (recommendation.length != expectedSlots ||
@@ -35,18 +42,6 @@ List<int> validateGeminiDishIds({
     return const [];
   }
   return recommendation;
-}
-
-bool _containsExclusion(PlannerDish dish, Set<String> exclusions) {
-  final searchable = <String>[
-    dish.name,
-    ...dish.ingredients,
-  ].join(' ').toLowerCase();
-  return exclusions.any(
-    (exclusion) =>
-        exclusion.trim().isNotEmpty &&
-        searchable.contains(exclusion.trim().toLowerCase()),
-  );
 }
 
 class GeminiSmartPlanService implements SmartPlanService {

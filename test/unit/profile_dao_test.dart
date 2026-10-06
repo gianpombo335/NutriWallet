@@ -109,4 +109,44 @@ void main() {
     expect((await dao.findById(first))?.weeklyBudgetCents, 9000);
     expect((await dao.findById(second))?.weeklyBudgetCents, 0);
   });
+
+  test(
+    'clearing account data removes local records and queued writes',
+    () async {
+      final database = AppDatabase();
+      addTearDown(database.close);
+      final profileId = await daoFor(database).save(
+        UserProfilesCompanion.insert(
+          email: 'clear@example.com',
+          createdAt: DateTime.utc(2026),
+          updatedAt: DateTime.utc(2026),
+        ),
+      );
+      await database
+          .into(database.dishes)
+          .insert(
+            DishesCompanion.insert(
+              userProfileId: profileId,
+              name: 'Local dish',
+              priceCents: 100,
+              createdAt: DateTime.utc(2026),
+              updatedAt: DateTime.utc(2026),
+            ),
+          );
+      await SyncQueueRepository(database).enqueue(
+        entityTable: 'Dishes',
+        entityId: 1,
+        operation: 'insert',
+        payload: const {'profile_id': 1},
+      );
+
+      await database.clearAccountData();
+
+      expect(await database.select(database.userProfiles).get(), isEmpty);
+      expect(await database.select(database.dishes).get(), isEmpty);
+      expect(await database.select(database.syncQueue).get(), isEmpty);
+    },
+  );
 }
+
+ProfileDao daoFor(AppDatabase database) => ProfileDao(database);

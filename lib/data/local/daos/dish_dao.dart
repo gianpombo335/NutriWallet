@@ -27,6 +27,13 @@ class DishDao extends DatabaseAccessor<AppDatabase> with _$DishDaoMixin {
   Future<Dishe?> findById(int id) =>
       (select(dishes)..where((dish) => dish.id.equals(id))).getSingleOrNull();
 
+  Future<Dishe?> findByIdForProfile(int profileId, int dishId) =>
+      (select(dishes)..where(
+            (dish) =>
+                dish.id.equals(dishId) & dish.userProfileId.equals(profileId),
+          ))
+          .getSingleOrNull();
+
   Future<List<Dishe>> findByPriceRange(
     int profileId,
     int minimumCents,
@@ -86,6 +93,19 @@ class DishDao extends DatabaseAccessor<AppDatabase> with _$DishDaoMixin {
 
   Future<int> insertIngredient(IngredientsCompanion ingredient) =>
       into(ingredients).insert(ingredient);
+
+  Future<int> updateDish(int dishId, DishesCompanion dish) =>
+      (update(dishes)..where((row) => row.id.equals(dishId))).write(dish);
+
+  Future<int> updateIngredient(
+    int ingredientId,
+    IngredientsCompanion ingredient,
+  ) => (update(
+    ingredients,
+  )..where((row) => row.id.equals(ingredientId))).write(ingredient);
+
+  Future<int> deleteIngredient(int ingredientId) =>
+      (delete(ingredients)..where((row) => row.id.equals(ingredientId))).go();
 
   Future<void> softDelete(int dishId) =>
       (update(dishes)..where((dish) => dish.id.equals(dishId))).write(

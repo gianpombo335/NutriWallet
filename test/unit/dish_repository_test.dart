@@ -126,4 +126,114 @@ void main() {
     expect(queue.last.operation, 'delete');
     expect(queue.last.entityId, dish.id);
   });
+
+  test('editing a dish updates ingredients and queues each change', () async {
+    final profiles = ProfileDao(database);
+    final profileId = await profiles.save(
+      UserProfilesCompanion.insert(
+        email: 'edit@example.com',
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
+    final repository = DishRepository(database);
+    final dish = await repository.createDish(
+      profileId: profileId,
+      name: 'Rice bowl',
+      priceCents: 500,
+      ingredients: const [
+        IngredientDraft(
+          name: 'rice',
+          calories: 200,
+          proteinG: 4,
+          carbsG: 44,
+          fatG: 1,
+        ),
+        IngredientDraft(
+          name: 'beans',
+          calories: 180,
+          proteinG: 12,
+          carbsG: 30,
+          fatG: 2,
+        ),
+      ],
+    );
+    final initialIngredients = await repository.ingredientsForDish(dish.id);
+
+    final updated = await repository.updateDish(
+      profileId: profileId,
+      dishId: dish.id,
+      name: 'Updated rice bowl',
+      priceCents: 650,
+      ingredients: [
+        IngredientDraft(
+          existingId: initialIngredients.first.id,
+          name: 'rice',
+          calories: 220,
+          proteinG: 5,
+          carbsG: 48,
+          fatG: 1,
+        ),
+        const IngredientDraft(
+          name: 'tomato',
+          calories: 20,
+          proteinG: 1,
+          carbsG: 4,
+          fatG: 0,
+        ),
+      ],
+    );
+
+    final ingredients = await repository.ingredientsForDish(updated.id);
+    expect(updated.name, 'Updated rice bowl');
+    expect(updated.priceCents, 650);
+    expect(ingredients.map((item) => item.name), ['rice', 'tomato']);
+    expect(ingredients.first.calories, 220);
+    final queue = await database.select(database.syncQueue).get();
+    expect(
+      queue.skip(3).map((item) => '${item.entityTable}:${item.operation}'),
+      [
+        'Dishes:update',
+        'Ingredients:delete',
+        'Ingredients:update',
+        'Ingredients:insert',
+      ],
+    );
+  });
+
+  test('editing another profile dish is rejected', () async {
+    final profiles = ProfileDao(database);
+    final firstProfile = await profiles.save(
+      UserProfilesCompanion.insert(
+        email: 'first@example.com',
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
+    final secondProfile = await profiles.save(
+      UserProfilesCompanion.insert(
+        email: 'second@example.com',
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
+    final repository = DishRepository(database);
+    final dish = await repository.createDish(
+      profileId: firstProfile,
+      name: 'Private dish',
+      priceCents: 100,
+      ingredients: const [],
+    );
+
+    await expectLater(
+      repository.updateDish(
+        profileId: secondProfile,
+        dishId: dish.id,
+        name: 'Changed',
+        priceCents: 200,
+        ingredients: const [],
+      ),
+      throwsStateError,
+    );
+  });
 }

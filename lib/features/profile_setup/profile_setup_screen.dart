@@ -47,8 +47,20 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
         return;
       }
       final budget = double.tryParse(_budgetController.text.trim());
-      if (budget == null || budget < 0) {
+      final weight = double.tryParse(_weightController.text.trim());
+      final height = double.tryParse(_heightController.text.trim());
+      final age = int.tryParse(_ageController.text.trim());
+      if (budget == null ||
+          !budget.isFinite ||
+          budget < 0 ||
+          budget > 10000000) {
         _showError('Enter a valid weekly budget before continuing.');
+        return;
+      }
+      if (!_validOptional(weight, _weightController.text, 1, 500) ||
+          !_validOptional(height, _heightController.text, 50, 250) ||
+          !_validOptionalInt(age, _ageController.text, 13, 120)) {
+        _showError('Enter realistic weight, height, and age values.');
         return;
       }
       final now = DateTime.now().toUtc();
@@ -61,9 +73,9 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
             email: email,
             weeklyBudgetCents: Value((budget * 100).round()),
             mealsPerDay: Value(_mealsPerDay),
-            weightKg: Value(double.tryParse(_weightController.text)),
-            heightCm: Value(double.tryParse(_heightController.text)),
-            age: Value(int.tryParse(_ageController.text)),
+            weightKg: Value(weight),
+            heightCm: Value(height),
+            age: Value(age),
             sex: Value(_sex),
             activityLevel: Value(_activity),
             goalPreset: Value(_goal),
@@ -79,9 +91,9 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
             email: Value(email),
             weeklyBudgetCents: Value((budget * 100).round()),
             mealsPerDay: Value(_mealsPerDay),
-            weightKg: Value(double.tryParse(_weightController.text)),
-            heightCm: Value(double.tryParse(_heightController.text)),
-            age: Value(int.tryParse(_ageController.text)),
+            weightKg: Value(weight),
+            heightCm: Value(height),
+            age: Value(age),
             sex: Value(_sex),
             activityLevel: Value(_activity),
             goalPreset: Value(_goal),
@@ -285,4 +297,16 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
       ),
     );
   }
+}
+
+bool _validOptional(double? value, String raw, double minimum, double maximum) {
+  final text = raw.trim();
+  return text.isEmpty ||
+      (value != null && value.isFinite && value >= minimum && value <= maximum);
+}
+
+bool _validOptionalInt(int? value, String raw, int minimum, int maximum) {
+  final text = raw.trim();
+  return text.isEmpty ||
+      (value != null && value >= minimum && value <= maximum);
 }

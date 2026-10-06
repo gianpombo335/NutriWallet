@@ -148,9 +148,26 @@ class SettingsScreen extends ConsumerWidget {
         const SizedBox(height: 8),
         OutlinedButton.icon(
           onPressed: () async {
-            await ref.read(authRepositoryProvider).signOut();
-            ref.invalidate(currentProfileProvider);
-            if (context.mounted) context.go('/auth');
+            try {
+              await ref.read(authRepositoryProvider).signOut();
+              await ref
+                  .read(mealReminderSchedulerProvider)
+                  .cancel(_ReminderSettingsState._reminderId);
+              await ref
+                  .read(backgroundPlanSchedulerProvider)
+                  .cancelWeeklyRegeneration();
+              await ref.read(databaseProvider).clearAccountData();
+              ref.invalidate(currentProfileProvider);
+              if (context.mounted) context.go('/auth');
+            } catch (_) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Could not sign out safely. Try again.'),
+                  ),
+                );
+              }
+            }
           },
           icon: const Icon(Icons.logout),
           label: const Text('Sign out'),
@@ -233,6 +250,8 @@ class _ReminderSettingsState extends ConsumerState<_ReminderSettings> {
       await ref
           .read(backgroundPlanSchedulerProvider)
           .cancelWeeklyRegeneration();
+      await ref.read(notificationPreferencesProvider).setEnabled(false);
+      if (mounted) setState(() => _enabled = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Meal reminders cancelled.')),
@@ -333,6 +352,7 @@ class _AllergyEditorState extends ConsumerState<_AllergyEditor> {
         payload: {'profile_id': widget.profileId, 'label': tag.label},
       );
     }
+    if (!mounted) return;
     _controller.clear();
     setState(_load);
   }
@@ -397,6 +417,7 @@ class _AllergyEditorState extends ConsumerState<_AllergyEditor> {
                               operation: 'delete',
                               payload: {'profile_id': widget.profileId},
                             );
+                            if (!mounted) return;
                             setState(_load);
                           },
                         ),

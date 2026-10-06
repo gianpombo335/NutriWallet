@@ -1,0 +1,139 @@
+name: NutriWallet quality
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  flutter:
+    name: Flutter checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Dart and Node dependencies
+        run: |
+          flutter pub get
+          npm ci
+
+      - name: Regenerate Drift sources
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Verify generated sources are committed
+        run: git diff --exit-code -- '**/*.g.dart'
+
+      - name: Verify formatting
+        run: dart format --output=none --set-exit-if-changed lib test
+
+      - name: Analyze Dart sources
+        run: flutter analyze --no-pub
+
+      - name: Run tests with coverage
+        run: flutter test --no-pub --coverage test
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-coverage
+          path: coverage/lcov.info
+
+  edge-functions:
+    name: Edge Function type checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Type-check Edge Functions
+        run: >-
+          deno check
+          supabase/functions/_shared/auth.ts
+          supabase/functions/nutrition-lookup/index.ts
+          supabase/functions/vision-recognize/index.ts
+          supabase/functions/plan-generate/index.ts
+          supabase/functions/sync-push/index.ts
+
+  android-package:
+    name: Android package smoke build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build debug APK
+        run: >-
+          flutter build apk --debug
+          --dart-define=SUPABASE_URL=https://ci.supabase.co
+          --dart-define=SUPABASE_ANON_KEY=ci-placeholder
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+
+  supabase-remote:
+    name: Linked Supabase checks
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Supabase CLI
+        run: npm ci
+
+      - name: Link project
+        run: npx supabase link --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Verify migrations
+        run: npx supabase migration list --linked
+
+      - name: Lint remote schema
+        run: npx supabase db lint --linked
+
+      - name: List deployed functions
+        run: npx supabase functions list --project-ref "$SUPABASE_PROJECT_REF"

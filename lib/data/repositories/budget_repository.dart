@@ -1,3 +1,5 @@
+import 'package:drift/drift.dart';
+
 import '../local/daos/budget_dao.dart';
 import '../local/database.dart';
 import 'meal_plan_repository.dart';
@@ -23,6 +25,7 @@ class BudgetRepository {
     int? generatedPlanId,
     int? mealSlotId,
   }) async {
+    _validateEntry(amountCents, label);
     final id = await _dao.addEntry(
       profileId: profileId,
       amountCents: amountCents,
@@ -73,7 +76,17 @@ class BudgetRepository {
 
   Future<void> clearMealSlotExpense(int mealSlotId) async {
     final existing = await _dao.findByMealSlotId(mealSlotId);
-    if (existing != null) await _dao.deleteEntry(existing.id);
+    if (existing == null) return;
+    await _dao.deleteEntry(existing.id);
+    await SyncQueueRepository(_database).enqueue(
+      entityTable: 'BudgetEntries',
+      entityId: existing.id,
+      operation: 'delete',
+      payload: {
+        'profile_id': existing.userProfileId,
+        'meal_slot_id': mealSlotId,
+      },
+    );
   }
 
   Future<void> updateEntry({
@@ -84,6 +97,7 @@ class BudgetRepository {
     required int? generatedPlanId,
     int? mealSlotId,
   }) async {
+    _validateEntry(amountCents, label);
     await _dao.updateEntry(
       entryId: entry.id,
       amountCents: amountCents,
@@ -105,6 +119,15 @@ class BudgetRepository {
         'meal_slot_id': mealSlotId,
       },
     );
+  }
+
+  void _validateEntry(int amountCents, String label) {
+    if (amountCents < 0 || amountCents > 1000000000) {
+      throw ArgumentError.value(amountCents, 'amountCents');
+    }
+    if (label.trim().length > 200) {
+      throw ArgumentError.value(label, 'label');
+    }
   }
 
   Future<void> upsertMealSlotExpense({
@@ -135,5 +158,150 @@ class BudgetRepository {
       generatedPlanId: generatedPlanId,
       mealSlotId: mealSlotId,
     );
+  }
+
+  Future<void> recordMealCheckIn({
+    required int profileId,
+    required int planId,
+    required int slotId,
+    required String mealStatus,
+    required DateTime consumedAt,
+    int? actualCostCents,
+    String? substituteName,
+    required String label,
+  }) async {
+    const validStatuses = {'eaten', 'substitute', 'skipped'};
+    if (!validStatuses.contains(mealStatus)) {
+      throw ArgumentError.value(mealStatus, 'mealStatus');
+    }
+    if (mealStatus == 'substitute' &&
+        (actualCostCents == null ||
+            actualCostCents < 0 ||
+            substituteName?.trim().isEmpty != false)) {
+      throw ArgumentError('Substitute meals require a name and actual cost.');
+    }
+    if (mealStatus == 'eaten' &&
+        (actualCostCents == null || actualCostCents < 0)) {
+      throw ArgumentError('Eaten meals require a non-negative actual cost.');
+    }
+    if (mealStatus == 'skipped' &&
+        (actualCostCents != null || substituteName != null)) {
+      throw ArgumentError('Skipped meals cannot have expense details.');
+    }
+
+    final slot =
+        await (_database.select(_database.mealSlots)..where(
+              (row) =>
+                  row.id.equals(slotId) & row.generatedPlanId.equals(planId),
+            ))
+            .getSingleOrNull();
+    final plan =
+        await (_database.select(_database.generatedPlans)..where(
+              (row) =>
+                  row.id.equals(planId) & row.userProfileId.equals(profileId),
+            ))
+            .getSingleOrNull();
+    if (slot == null || plan == null) return;
+
+    await _database.transaction(() async {
+      final changedAt = DateTime.now().toUtc();
+      await (_database.update(
+        _database.mealSlots,
+      )..where((row) => row.id.equals(slotId))).write(
+        MealSlotsCompanion(
+          mealStatus: Value(mealStatus),
+          actualCostCents: Value(actualCostCents),
+          substituteName: Value(substituteName),
+          consumedAt: Value(consumedAt.toUtc()),
+        ),
+      );
+      final queue = SyncQueueRepository(_database);
+      await queue.enqueue(
+        entityTable: 'MealSlots',
+        entityId: slot.id,
+        operation: 'update',
+        payload: {
+          'profile_id': profileId,
+          'generated_plan_id': slot.generatedPlanId,
+          'dish_id': slot.dishId,
+          'day_index': slot.dayIndex,
+          'slot_index': slot.slotIndex,
+          'planned_cost_cents': slot.plannedCostCents,
+          'planned_calories': slot.plannedCalories,
+          'planned_protein_g': slot.plannedProteinG,
+          'planned_carbs_g': slot.plannedCarbsG,
+          'planned_fat_g': slot.plannedFatG,
+          'servings': slot.servings,
+          'meal_status': mealStatus,
+          'actual_cost_cents': actualCostCents,
+          'substitute_name': substituteName,
+          'consumed_at': consumedAt.toUtc().toIso8601String(),
+        },
+        dirtyAt: changedAt,
+      );
+
+      final existing = await _dao.findByMealSlotId(slotId);
+      if (mealStatus == 'skipped') {
+        if (existing != null) {
+          await _dao.deleteEntry(existing.id);
+          await queue.enqueue(
+            entityTable: 'BudgetEntries',
+            entityId: existing.id,
+            operation: 'delete',
+            payload: {'profile_id': profileId, 'meal_slot_id': slotId},
+            dirtyAt: changedAt,
+          );
+        }
+        return;
+      }
+
+      if (existing == null) {
+        final entryId = await _dao.addEntry(
+          profileId: profileId,
+          amountCents: actualCostCents!,
+          label: label,
+          occurredAt: consumedAt,
+          generatedPlanId: planId,
+          mealSlotId: slotId,
+        );
+        await queue.enqueue(
+          entityTable: 'BudgetEntries',
+          entityId: entryId,
+          operation: 'insert',
+          payload: {
+            'profile_id': profileId,
+            'amount_cents': actualCostCents,
+            'label': label,
+            'occurred_at': consumedAt.toUtc().toIso8601String(),
+            'generated_plan_id': planId,
+            'meal_slot_id': slotId,
+          },
+          dirtyAt: changedAt,
+        );
+      } else {
+        await _dao.updateEntry(
+          entryId: existing.id,
+          amountCents: actualCostCents!,
+          label: label,
+          occurredAt: consumedAt,
+          generatedPlanId: planId,
+          mealSlotId: slotId,
+        );
+        await queue.enqueue(
+          entityTable: 'BudgetEntries',
+          entityId: existing.id,
+          operation: 'update',
+          payload: {
+            'profile_id': profileId,
+            'amount_cents': actualCostCents,
+            'label': label,
+            'occurred_at': consumedAt.toUtc().toIso8601String(),
+            'generated_plan_id': planId,
+            'meal_slot_id': slotId,
+          },
+          dirtyAt: changedAt,
+        );
+      }
+    });
   }
 }

@@ -1,4 +1,5 @@
 import 'package:workmanager/workmanager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../data/local/daos/profile_dao.dart';
 import '../../data/local/database.dart';
@@ -36,6 +37,7 @@ void _backgroundDispatcher() {
     if (taskName != weeklyPlanTaskName) return false;
     final database = AppDatabase.persistent();
     try {
+      final preferences = await SharedPreferences.getInstance();
       final profiles = await database.select(database.userProfiles).get();
       final dishes = DishRepository(database);
       final profilesDao = ProfileDao(database);
@@ -61,10 +63,21 @@ void _backgroundDispatcher() {
           days: activeDays,
           mealsPerDay: profile.mealsPerDay,
         );
+        if (plan.assignments.length !=
+                activeDays.length * profile.mealsPerDay ||
+            plan.isOverBudget) {
+          continue;
+        }
+        final previous = await plans.latestPlan(profile.id);
         await plans.savePlan(
           profileId: profile.id,
           weekStartDate: _nextWeekStart(DateTime.now()),
           plan: plan,
+          planningFocus: previous?.planningFocus ?? 'balanced',
+          currencyCode:
+              preferences.getString('currency_code') ??
+              previous?.currencyCode ??
+              'USD',
         );
       }
       return true;

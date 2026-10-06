@@ -3775,6 +3775,54 @@ class $MealSlotsTable extends MealSlots
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _plannedProteinGMeta = const VerificationMeta(
+    'plannedProteinG',
+  );
+  @override
+  late final GeneratedColumn<double> plannedProteinG = GeneratedColumn<double>(
+    'planned_protein_g',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _plannedCarbsGMeta = const VerificationMeta(
+    'plannedCarbsG',
+  );
+  @override
+  late final GeneratedColumn<double> plannedCarbsG = GeneratedColumn<double>(
+    'planned_carbs_g',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _plannedFatGMeta = const VerificationMeta(
+    'plannedFatG',
+  );
+  @override
+  late final GeneratedColumn<double> plannedFatG = GeneratedColumn<double>(
+    'planned_fat_g',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _servingsMeta = const VerificationMeta(
+    'servings',
+  );
+  @override
+  late final GeneratedColumn<double> servings = GeneratedColumn<double>(
+    'servings',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
   static const VerificationMeta _mealStatusMeta = const VerificationMeta(
     'mealStatus',
   );
@@ -3829,6 +3877,10 @@ class $MealSlotsTable extends MealSlots
     dishId,
     plannedCostCents,
     plannedCalories,
+    plannedProteinG,
+    plannedCarbsG,
+    plannedFatG,
+    servings,
     mealStatus,
     actualCostCents,
     substituteName,
@@ -3904,6 +3956,39 @@ class $MealSlotsTable extends MealSlots
         ),
       );
     }
+    if (data.containsKey('planned_protein_g')) {
+      context.handle(
+        _plannedProteinGMeta,
+        plannedProteinG.isAcceptableOrUnknown(
+          data['planned_protein_g']!,
+          _plannedProteinGMeta,
+        ),
+      );
+    }
+    if (data.containsKey('planned_carbs_g')) {
+      context.handle(
+        _plannedCarbsGMeta,
+        plannedCarbsG.isAcceptableOrUnknown(
+          data['planned_carbs_g']!,
+          _plannedCarbsGMeta,
+        ),
+      );
+    }
+    if (data.containsKey('planned_fat_g')) {
+      context.handle(
+        _plannedFatGMeta,
+        plannedFatG.isAcceptableOrUnknown(
+          data['planned_fat_g']!,
+          _plannedFatGMeta,
+        ),
+      );
+    }
+    if (data.containsKey('servings')) {
+      context.handle(
+        _servingsMeta,
+        servings.isAcceptableOrUnknown(data['servings']!, _servingsMeta),
+      );
+    }
     if (data.containsKey('meal_status')) {
       context.handle(
         _mealStatusMeta,
@@ -3971,6 +4056,22 @@ class $MealSlotsTable extends MealSlots
         DriftSqlType.double,
         data['${effectivePrefix}planned_calories'],
       )!,
+      plannedProteinG: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}planned_protein_g'],
+      )!,
+      plannedCarbsG: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}planned_carbs_g'],
+      )!,
+      plannedFatG: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}planned_fat_g'],
+      )!,
+      servings: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}servings'],
+      )!,
       mealStatus: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}meal_status'],
@@ -4004,6 +4105,10 @@ class MealSlot extends DataClass implements Insertable<MealSlot> {
   final int dishId;
   final int plannedCostCents;
   final double plannedCalories;
+  final double plannedProteinG;
+  final double plannedCarbsG;
+  final double plannedFatG;
+  final double servings;
   final String mealStatus;
   final int? actualCostCents;
   final String? substituteName;
@@ -4016,6 +4121,10 @@ class MealSlot extends DataClass implements Insertable<MealSlot> {
     required this.dishId,
     required this.plannedCostCents,
     required this.plannedCalories,
+    required this.plannedProteinG,
+    required this.plannedCarbsG,
+    required this.plannedFatG,
+    required this.servings,
     required this.mealStatus,
     this.actualCostCents,
     this.substituteName,
@@ -4031,6 +4140,10 @@ class MealSlot extends DataClass implements Insertable<MealSlot> {
     map['dish_id'] = Variable<int>(dishId);
     map['planned_cost_cents'] = Variable<int>(plannedCostCents);
     map['planned_calories'] = Variable<double>(plannedCalories);
+    map['planned_protein_g'] = Variable<double>(plannedProteinG);
+    map['planned_carbs_g'] = Variable<double>(plannedCarbsG);
+    map['planned_fat_g'] = Variable<double>(plannedFatG);
+    map['servings'] = Variable<double>(servings);
     map['meal_status'] = Variable<String>(mealStatus);
     if (!nullToAbsent || actualCostCents != null) {
       map['actual_cost_cents'] = Variable<int>(actualCostCents);
@@ -4053,6 +4166,10 @@ class MealSlot extends DataClass implements Insertable<MealSlot> {
       dishId: Value(dishId),
       plannedCostCents: Value(plannedCostCents),
       plannedCalories: Value(plannedCalories),
+      plannedProteinG: Value(plannedProteinG),
+      plannedCarbsG: Value(plannedCarbsG),
+      plannedFatG: Value(plannedFatG),
+      servings: Value(servings),
       mealStatus: Value(mealStatus),
       actualCostCents: actualCostCents == null && nullToAbsent
           ? const Value.absent()
@@ -4079,6 +4196,10 @@ class MealSlot extends DataClass implements Insertable<MealSlot> {
       dishId: serializer.fromJson<int>(json['dishId']),
       plannedCostCents: serializer.fromJson<int>(json['plannedCostCents']),
       plannedCalories: serializer.fromJson<double>(json['plannedCalories']),
+      plannedProteinG: serializer.fromJson<double>(json['plannedProteinG']),
+      plannedCarbsG: serializer.fromJson<double>(json['plannedCarbsG']),
+      plannedFatG: serializer.fromJson<double>(json['plannedFatG']),
+      servings: serializer.fromJson<double>(json['servings']),
       mealStatus: serializer.fromJson<String>(json['mealStatus']),
       actualCostCents: serializer.fromJson<int?>(json['actualCostCents']),
       substituteName: serializer.fromJson<String?>(json['substituteName']),
@@ -4096,6 +4217,10 @@ class MealSlot extends DataClass implements Insertable<MealSlot> {
       'dishId': serializer.toJson<int>(dishId),
       'plannedCostCents': serializer.toJson<int>(plannedCostCents),
       'plannedCalories': serializer.toJson<double>(plannedCalories),
+      'plannedProteinG': serializer.toJson<double>(plannedProteinG),
+      'plannedCarbsG': serializer.toJson<double>(plannedCarbsG),
+      'plannedFatG': serializer.toJson<double>(plannedFatG),
+      'servings': serializer.toJson<double>(servings),
       'mealStatus': serializer.toJson<String>(mealStatus),
       'actualCostCents': serializer.toJson<int?>(actualCostCents),
       'substituteName': serializer.toJson<String?>(substituteName),
@@ -4111,6 +4236,10 @@ class MealSlot extends DataClass implements Insertable<MealSlot> {
     int? dishId,
     int? plannedCostCents,
     double? plannedCalories,
+    double? plannedProteinG,
+    double? plannedCarbsG,
+    double? plannedFatG,
+    double? servings,
     String? mealStatus,
     Value<int?> actualCostCents = const Value.absent(),
     Value<String?> substituteName = const Value.absent(),
@@ -4123,6 +4252,10 @@ class MealSlot extends DataClass implements Insertable<MealSlot> {
     dishId: dishId ?? this.dishId,
     plannedCostCents: plannedCostCents ?? this.plannedCostCents,
     plannedCalories: plannedCalories ?? this.plannedCalories,
+    plannedProteinG: plannedProteinG ?? this.plannedProteinG,
+    plannedCarbsG: plannedCarbsG ?? this.plannedCarbsG,
+    plannedFatG: plannedFatG ?? this.plannedFatG,
+    servings: servings ?? this.servings,
     mealStatus: mealStatus ?? this.mealStatus,
     actualCostCents: actualCostCents.present
         ? actualCostCents.value
@@ -4147,6 +4280,16 @@ class MealSlot extends DataClass implements Insertable<MealSlot> {
       plannedCalories: data.plannedCalories.present
           ? data.plannedCalories.value
           : this.plannedCalories,
+      plannedProteinG: data.plannedProteinG.present
+          ? data.plannedProteinG.value
+          : this.plannedProteinG,
+      plannedCarbsG: data.plannedCarbsG.present
+          ? data.plannedCarbsG.value
+          : this.plannedCarbsG,
+      plannedFatG: data.plannedFatG.present
+          ? data.plannedFatG.value
+          : this.plannedFatG,
+      servings: data.servings.present ? data.servings.value : this.servings,
       mealStatus: data.mealStatus.present
           ? data.mealStatus.value
           : this.mealStatus,
@@ -4172,6 +4315,10 @@ class MealSlot extends DataClass implements Insertable<MealSlot> {
           ..write('dishId: $dishId, ')
           ..write('plannedCostCents: $plannedCostCents, ')
           ..write('plannedCalories: $plannedCalories, ')
+          ..write('plannedProteinG: $plannedProteinG, ')
+          ..write('plannedCarbsG: $plannedCarbsG, ')
+          ..write('plannedFatG: $plannedFatG, ')
+          ..write('servings: $servings, ')
           ..write('mealStatus: $mealStatus, ')
           ..write('actualCostCents: $actualCostCents, ')
           ..write('substituteName: $substituteName, ')
@@ -4189,6 +4336,10 @@ class MealSlot extends DataClass implements Insertable<MealSlot> {
     dishId,
     plannedCostCents,
     plannedCalories,
+    plannedProteinG,
+    plannedCarbsG,
+    plannedFatG,
+    servings,
     mealStatus,
     actualCostCents,
     substituteName,
@@ -4205,6 +4356,10 @@ class MealSlot extends DataClass implements Insertable<MealSlot> {
           other.dishId == this.dishId &&
           other.plannedCostCents == this.plannedCostCents &&
           other.plannedCalories == this.plannedCalories &&
+          other.plannedProteinG == this.plannedProteinG &&
+          other.plannedCarbsG == this.plannedCarbsG &&
+          other.plannedFatG == this.plannedFatG &&
+          other.servings == this.servings &&
           other.mealStatus == this.mealStatus &&
           other.actualCostCents == this.actualCostCents &&
           other.substituteName == this.substituteName &&
@@ -4219,6 +4374,10 @@ class MealSlotsCompanion extends UpdateCompanion<MealSlot> {
   final Value<int> dishId;
   final Value<int> plannedCostCents;
   final Value<double> plannedCalories;
+  final Value<double> plannedProteinG;
+  final Value<double> plannedCarbsG;
+  final Value<double> plannedFatG;
+  final Value<double> servings;
   final Value<String> mealStatus;
   final Value<int?> actualCostCents;
   final Value<String?> substituteName;
@@ -4231,6 +4390,10 @@ class MealSlotsCompanion extends UpdateCompanion<MealSlot> {
     this.dishId = const Value.absent(),
     this.plannedCostCents = const Value.absent(),
     this.plannedCalories = const Value.absent(),
+    this.plannedProteinG = const Value.absent(),
+    this.plannedCarbsG = const Value.absent(),
+    this.plannedFatG = const Value.absent(),
+    this.servings = const Value.absent(),
     this.mealStatus = const Value.absent(),
     this.actualCostCents = const Value.absent(),
     this.substituteName = const Value.absent(),
@@ -4244,6 +4407,10 @@ class MealSlotsCompanion extends UpdateCompanion<MealSlot> {
     required int dishId,
     required int plannedCostCents,
     this.plannedCalories = const Value.absent(),
+    this.plannedProteinG = const Value.absent(),
+    this.plannedCarbsG = const Value.absent(),
+    this.plannedFatG = const Value.absent(),
+    this.servings = const Value.absent(),
     this.mealStatus = const Value.absent(),
     this.actualCostCents = const Value.absent(),
     this.substituteName = const Value.absent(),
@@ -4261,6 +4428,10 @@ class MealSlotsCompanion extends UpdateCompanion<MealSlot> {
     Expression<int>? dishId,
     Expression<int>? plannedCostCents,
     Expression<double>? plannedCalories,
+    Expression<double>? plannedProteinG,
+    Expression<double>? plannedCarbsG,
+    Expression<double>? plannedFatG,
+    Expression<double>? servings,
     Expression<String>? mealStatus,
     Expression<int>? actualCostCents,
     Expression<String>? substituteName,
@@ -4274,6 +4445,10 @@ class MealSlotsCompanion extends UpdateCompanion<MealSlot> {
       if (dishId != null) 'dish_id': dishId,
       if (plannedCostCents != null) 'planned_cost_cents': plannedCostCents,
       if (plannedCalories != null) 'planned_calories': plannedCalories,
+      if (plannedProteinG != null) 'planned_protein_g': plannedProteinG,
+      if (plannedCarbsG != null) 'planned_carbs_g': plannedCarbsG,
+      if (plannedFatG != null) 'planned_fat_g': plannedFatG,
+      if (servings != null) 'servings': servings,
       if (mealStatus != null) 'meal_status': mealStatus,
       if (actualCostCents != null) 'actual_cost_cents': actualCostCents,
       if (substituteName != null) 'substitute_name': substituteName,
@@ -4289,6 +4464,10 @@ class MealSlotsCompanion extends UpdateCompanion<MealSlot> {
     Value<int>? dishId,
     Value<int>? plannedCostCents,
     Value<double>? plannedCalories,
+    Value<double>? plannedProteinG,
+    Value<double>? plannedCarbsG,
+    Value<double>? plannedFatG,
+    Value<double>? servings,
     Value<String>? mealStatus,
     Value<int?>? actualCostCents,
     Value<String?>? substituteName,
@@ -4302,6 +4481,10 @@ class MealSlotsCompanion extends UpdateCompanion<MealSlot> {
       dishId: dishId ?? this.dishId,
       plannedCostCents: plannedCostCents ?? this.plannedCostCents,
       plannedCalories: plannedCalories ?? this.plannedCalories,
+      plannedProteinG: plannedProteinG ?? this.plannedProteinG,
+      plannedCarbsG: plannedCarbsG ?? this.plannedCarbsG,
+      plannedFatG: plannedFatG ?? this.plannedFatG,
+      servings: servings ?? this.servings,
       mealStatus: mealStatus ?? this.mealStatus,
       actualCostCents: actualCostCents ?? this.actualCostCents,
       substituteName: substituteName ?? this.substituteName,
@@ -4333,6 +4516,18 @@ class MealSlotsCompanion extends UpdateCompanion<MealSlot> {
     if (plannedCalories.present) {
       map['planned_calories'] = Variable<double>(plannedCalories.value);
     }
+    if (plannedProteinG.present) {
+      map['planned_protein_g'] = Variable<double>(plannedProteinG.value);
+    }
+    if (plannedCarbsG.present) {
+      map['planned_carbs_g'] = Variable<double>(plannedCarbsG.value);
+    }
+    if (plannedFatG.present) {
+      map['planned_fat_g'] = Variable<double>(plannedFatG.value);
+    }
+    if (servings.present) {
+      map['servings'] = Variable<double>(servings.value);
+    }
     if (mealStatus.present) {
       map['meal_status'] = Variable<String>(mealStatus.value);
     }
@@ -4358,6 +4553,10 @@ class MealSlotsCompanion extends UpdateCompanion<MealSlot> {
           ..write('dishId: $dishId, ')
           ..write('plannedCostCents: $plannedCostCents, ')
           ..write('plannedCalories: $plannedCalories, ')
+          ..write('plannedProteinG: $plannedProteinG, ')
+          ..write('plannedCarbsG: $plannedCarbsG, ')
+          ..write('plannedFatG: $plannedFatG, ')
+          ..write('servings: $servings, ')
           ..write('mealStatus: $mealStatus, ')
           ..write('actualCostCents: $actualCostCents, ')
           ..write('substituteName: $substituteName, ')
@@ -9034,6 +9233,10 @@ typedef $$MealSlotsTableCreateCompanionBuilder = MealSlotsCompanion Function({
   required int dishId,
   required int plannedCostCents,
   Value<double> plannedCalories,
+  Value<double> plannedProteinG,
+  Value<double> plannedCarbsG,
+  Value<double> plannedFatG,
+  Value<double> servings,
   Value<String> mealStatus,
   Value<int?> actualCostCents,
   Value<String?> substituteName,
@@ -9047,6 +9250,10 @@ typedef $$MealSlotsTableUpdateCompanionBuilder = MealSlotsCompanion Function({
   Value<int> dishId,
   Value<int> plannedCostCents,
   Value<double> plannedCalories,
+  Value<double> plannedProteinG,
+  Value<double> plannedCarbsG,
+  Value<double> plannedFatG,
+  Value<double> servings,
   Value<String> mealStatus,
   Value<int?> actualCostCents,
   Value<String?> substituteName,
@@ -9142,6 +9349,26 @@ class $$MealSlotsTableFilterComposer
 
   ColumnFilters<double> get plannedCalories => $composableBuilder(
     column: $table.plannedCalories,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get plannedProteinG => $composableBuilder(
+    column: $table.plannedProteinG,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get plannedCarbsG => $composableBuilder(
+    column: $table.plannedCarbsG,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get plannedFatG => $composableBuilder(
+    column: $table.plannedFatG,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get servings => $composableBuilder(
+    column: $table.servings,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -9271,6 +9498,26 @@ class $$MealSlotsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<double> get plannedProteinG => $composableBuilder(
+    column: $table.plannedProteinG,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get plannedCarbsG => $composableBuilder(
+    column: $table.plannedCarbsG,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get plannedFatG => $composableBuilder(
+    column: $table.plannedFatG,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get servings => $composableBuilder(
+    column: $table.servings,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get mealStatus => $composableBuilder(
     column: $table.mealStatus,
     builder: (column) => ColumnOrderings(column),
@@ -9365,6 +9612,24 @@ class $$MealSlotsTableAnnotationComposer
     column: $table.plannedCalories,
     builder: (column) => column,
   );
+
+  GeneratedColumn<double> get plannedProteinG => $composableBuilder(
+    column: $table.plannedProteinG,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get plannedCarbsG => $composableBuilder(
+    column: $table.plannedCarbsG,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get plannedFatG => $composableBuilder(
+    column: $table.plannedFatG,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get servings =>
+      $composableBuilder(column: $table.servings, builder: (column) => column);
 
   GeneratedColumn<String> get mealStatus => $composableBuilder(
     column: $table.mealStatus,
@@ -9497,6 +9762,10 @@ class $$MealSlotsTableTableManager
                 Value<int> dishId = const Value.absent(),
                 Value<int> plannedCostCents = const Value.absent(),
                 Value<double> plannedCalories = const Value.absent(),
+                Value<double> plannedProteinG = const Value.absent(),
+                Value<double> plannedCarbsG = const Value.absent(),
+                Value<double> plannedFatG = const Value.absent(),
+                Value<double> servings = const Value.absent(),
                 Value<String> mealStatus = const Value.absent(),
                 Value<int?> actualCostCents = const Value.absent(),
                 Value<String?> substituteName = const Value.absent(),
@@ -9509,6 +9778,10 @@ class $$MealSlotsTableTableManager
                 dishId: dishId,
                 plannedCostCents: plannedCostCents,
                 plannedCalories: plannedCalories,
+                plannedProteinG: plannedProteinG,
+                plannedCarbsG: plannedCarbsG,
+                plannedFatG: plannedFatG,
+                servings: servings,
                 mealStatus: mealStatus,
                 actualCostCents: actualCostCents,
                 substituteName: substituteName,
@@ -9523,6 +9796,10 @@ class $$MealSlotsTableTableManager
                 required int dishId,
                 required int plannedCostCents,
                 Value<double> plannedCalories = const Value.absent(),
+                Value<double> plannedProteinG = const Value.absent(),
+                Value<double> plannedCarbsG = const Value.absent(),
+                Value<double> plannedFatG = const Value.absent(),
+                Value<double> servings = const Value.absent(),
                 Value<String> mealStatus = const Value.absent(),
                 Value<int?> actualCostCents = const Value.absent(),
                 Value<String?> substituteName = const Value.absent(),
@@ -9535,6 +9812,10 @@ class $$MealSlotsTableTableManager
                 dishId: dishId,
                 plannedCostCents: plannedCostCents,
                 plannedCalories: plannedCalories,
+                plannedProteinG: plannedProteinG,
+                plannedCarbsG: plannedCarbsG,
+                plannedFatG: plannedFatG,
+                servings: servings,
                 mealStatus: mealStatus,
                 actualCostCents: actualCostCents,
                 substituteName: substituteName,

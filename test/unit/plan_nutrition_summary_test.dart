@@ -39,4 +39,33 @@ void main() {
     expect(summary.carbsG, 80);
     expect(summary.fatG, 14);
   });
+
+  test('scales nutrition totals with serving amounts', () {
+    const dish = PlannerDish(
+      id: 1,
+      name: 'Bowl',
+      price: 2,
+      calories: 400,
+      proteinG: 30,
+      carbsG: 50,
+      fatG: 10,
+    );
+    const assignments = [
+      MealSlotAssignment(
+        dayIndex: 1,
+        slotIndex: 0,
+        dish: dish,
+        reason: 'fit',
+        servings: 1.5,
+      ),
+    ];
+
+    final summary = PlanNutritionSummary.fromAssignments(assignments);
+
+    expect(summary.calories, 600);
+    expect(summary.proteinG, 45);
+    expect(summary.carbsG, 75);
+    expect(summary.fatG, 15);
+    expect(assignments.single.plannedCostCents, 300);
+  });
 }

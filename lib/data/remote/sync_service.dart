@@ -91,25 +91,32 @@ class SyncService {
 
   final SyncQueueRepository _queue;
   final SyncRemoteEndpoint endpoint;
+  bool _syncing = false;
 
   Future<int> syncPending() async {
+    if (_syncing) return 0;
+    _syncing = true;
     var confirmed = 0;
-    final pending = await _queue.pending();
-    for (final item in pending) {
-      final result = await endpoint.push(
-        entityTable: item.entityTable,
-        entityId: item.entityId,
-        operation: item.operation,
-        payload: jsonDecode(item.payloadJson) as Map<String, dynamic>,
-        dirtyAt: item.queuedAt,
-      );
-      // A conflict is also confirmed: the server's newer version won under LWW.
-      if (result.accepted || result.conflict) {
-        await _queue.markConfirmed(item.id, DateTime.now().toUtc());
-        confirmed++;
+    try {
+      final pending = await _queue.pending();
+      for (final item in pending) {
+        final result = await endpoint.push(
+          entityTable: item.entityTable,
+          entityId: item.entityId,
+          operation: item.operation,
+          payload: jsonDecode(item.payloadJson) as Map<String, dynamic>,
+          dirtyAt: item.queuedAt,
+        );
+        // A conflict is also confirmed: the server's newer version won under LWW.
+        if (result.accepted || result.conflict) {
+          await _queue.markConfirmed(item.id, DateTime.now().toUtc());
+          confirmed++;
+        }
       }
+      return confirmed;
+    } finally {
+      _syncing = false;
     }
-    return confirmed;
   }
 }
 

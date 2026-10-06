@@ -31,6 +31,15 @@ void main() {
         updatedAt: DateTime.utc(2026),
       ),
     );
+    final replacementDishId = await DishDao(database).insertDish(
+      DishesCompanion.insert(
+        userProfileId: profileId,
+        name: 'Bean salad',
+        priceCents: 300,
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
     final dish = PlannerDish(
       id: dishId,
       name: 'Rice bowl',
@@ -95,6 +104,34 @@ void main() {
     expect((await repository.activePlan(profileId))?.version, 1);
 
     final slot = (await repository.slotsForPlan(rows.first.id)).single;
+    await repository.updateMealSlotPlan(
+      profileId: profileId,
+      planId: rows.first.id,
+      dayIndex: slot.dayIndex,
+      slotIndex: slot.slotIndex,
+      dish: PlannerDish(
+        id: replacementDishId,
+        name: 'Bean salad',
+        price: 3,
+        calories: 250,
+        proteinG: 18,
+        carbsG: 35,
+        fatG: 6,
+      ),
+      servings: 1.5,
+    );
+    final editedSlot = (await repository.slotsForPlan(rows.first.id)).single;
+    expect(editedSlot.dishId, replacementDishId);
+    expect(editedSlot.servings, 1.5);
+    expect(editedSlot.plannedCostCents, 450);
+    expect(editedSlot.plannedCalories, 375);
+    expect(editedSlot.plannedProteinG, 27);
+    expect(editedSlot.plannedCarbsG, 52.5);
+    expect(editedSlot.plannedFatG, 9);
+    final editedPlan = await repository.findById(rows.first.id);
+    expect(editedPlan?.totalProjectedCostCents, 450);
+    expect(editedPlan?.isOverBudget, false);
+
     await repository.updateMealSlot(
       profileId: profileId,
       slotId: slot.id,
@@ -128,5 +165,75 @@ void main() {
     final expenses = await budget.watchEntries(profileId).first;
     expect(expenses, hasLength(1));
     expect(expenses.single.amountCents, 900);
+  });
+
+  test('saved plan slots retain their nutrition after a dish edit', () async {
+    final database = AppDatabase();
+    addTearDown(database.close);
+    final profileId = await ProfileDao(database).save(
+      UserProfilesCompanion.insert(
+        email: 'snapshot@example.com',
+        weeklyBudgetCents: const Value(1000),
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
+    final dao = DishDao(database);
+    final dishId = await dao.insertDish(
+      DishesCompanion.insert(
+        userProfileId: profileId,
+        name: 'Original dish',
+        priceCents: 500,
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
+    final repository = MealPlanRepository(database);
+    final plan = await repository.savePlan(
+      profileId: profileId,
+      weekStartDate: DateTime.utc(2026, 1, 5),
+      plan: GeneratedMealPlan(
+        assignments: [
+          MealSlotAssignment(
+            dayIndex: 1,
+            slotIndex: 0,
+            dish: PlannerDish(
+              id: dishId,
+              name: 'Original dish',
+              price: 5,
+              calories: 400,
+              proteinG: 20,
+              carbsG: 50,
+              fatG: 10,
+            ),
+            reason: 'fits budget',
+          ),
+        ],
+        totalCostCents: 500,
+        isOverBudget: false,
+      ),
+    );
+
+    await dao.updateDish(
+      dishId,
+      DishesCompanion(
+        name: const Value('Edited dish'),
+        priceCents: const Value(900),
+        updatedAt: Value(DateTime.utc(2026, 1, 6)),
+      ),
+    );
+    await dao.insertIngredient(
+      IngredientsCompanion.insert(
+        dishId: dishId,
+        name: 'New ingredient',
+        calories: const Value(999),
+      ),
+    );
+
+    final loaded = await repository.loadMealPlan(plan);
+    expect(loaded.assignments.single.dish.name, 'Edited dish');
+    expect(loaded.assignments.single.dish.price, 5);
+    expect(loaded.assignments.single.nutrition.calories, 400);
+    expect(loaded.totalCostCents, 500);
   });
 }

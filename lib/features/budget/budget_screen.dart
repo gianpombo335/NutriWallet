@@ -80,7 +80,7 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
             label: draft.label,
             occurredAt: draft.occurredAt,
             generatedPlanId: draft.linkToActivePlan ? activePlanId : null,
-            mealSlotId: entry.mealSlotId,
+            mealSlotId: draft.linkToActivePlan ? entry.mealSlotId : null,
           );
     } catch (_) {
       if (context.mounted) {
@@ -121,7 +121,10 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
           FilledButton(
             onPressed: () {
               final value = double.tryParse(controller.text.trim());
-              if (value != null && value >= 0) {
+              if (value != null &&
+                  value.isFinite &&
+                  value >= 0 &&
+                  value <= 10000000) {
                 Navigator.pop(dialogContext, value);
               }
             },
@@ -244,16 +247,6 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
       substituteName = outcome.name;
       consumedAt = outcome.consumedAt;
     }
-    await ref
-        .read(mealPlanRepositoryProvider)
-        .updateMealSlot(
-          profileId: profile.id,
-          slotId: slot.id,
-          mealStatus: status,
-          consumedAt: consumedAt,
-          actualCostCents: actualCost,
-          substituteName: substituteName,
-        );
     final checkInLabel = switch (status) {
       'eaten' =>
         'Meal eaten as planned · Day ${slot.dayIndex}, meal ${slot.slotIndex + 1}',
@@ -262,13 +255,15 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
     };
     await ref
         .read(budgetRepositoryProvider)
-        .upsertMealSlotExpense(
+        .recordMealCheckIn(
           profileId: profile.id,
-          mealSlotId: slot.id,
-          amountCents: actualCost ?? 0,
+          planId: plan.id,
+          slotId: slot.id,
+          mealStatus: status,
+          consumedAt: consumedAt,
+          actualCostCents: actualCost,
+          substituteName: substituteName,
           label: checkInLabel,
-          occurredAt: consumedAt,
-          generatedPlanId: plan.id,
         );
     if (context.mounted) setState(() {});
   }
@@ -291,10 +286,16 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
             until: weekStart.add(const Duration(days: 7)),
           ),
       builder: (context, entriesSnapshot) {
+        if (entriesSnapshot.hasError) {
+          return const Center(child: Text('Could not load budget entries.'));
+        }
         final entries = entriesSnapshot.data ?? const <BudgetEntry>[];
         return FutureBuilder<GeneratedPlan?>(
           future: ref.read(mealPlanRepositoryProvider).activePlan(profile.id),
           builder: (context, planSnapshot) {
+            if (planSnapshot.hasError) {
+              return const Center(child: Text('Could not load the active plan.'));
+            }
             final plan = planSnapshot.data;
             final budget = profile.weeklyBudgetCents;
             final planned = plan?.totalProjectedCostCents ?? 0;
@@ -601,10 +602,13 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
     );
   }
 
-  String _date(DateTime value) => '${value.month}/${value.day}/${value.year}';
+  String _date(DateTime value) {
+    final local = value.toLocal();
+    return '${local.month}/${local.day}/${local.year}';
+  }
 
   DateTime _weekStart(DateTime date) =>
-      DateTime.utc(date.year, date.month, date.day - (date.weekday - 1));
+      DateTime(date.year, date.month, date.day - (date.weekday - 1)).toUtc();
 }
 
 class _Legend extends StatelessWidget {
@@ -781,7 +785,13 @@ class _SubstituteMealDialogState extends State<_SubstituteMealDialog> {
           onPressed: () {
             final name = _nameController.text.trim();
             final amount = double.tryParse(_amountController.text.trim());
-            if (name.isEmpty || amount == null || amount <= 0) return;
+            if (name.isEmpty ||
+                amount == null ||
+                !amount.isFinite ||
+                amount <= 0 ||
+                amount > 10000000) {
+              return;
+            }
             Navigator.pop(
               context,
               _MealOutcome(
@@ -936,7 +946,12 @@ class _AddSpendDialogState extends State<_AddSpendDialog> {
         FilledButton(
           onPressed: () {
             final amount = double.tryParse(_amount.text);
-            if (amount == null || amount <= 0) return;
+            if (amount == null ||
+                !amount.isFinite ||
+                amount <= 0 ||
+                amount > 10000000) {
+              return;
+            }
             Navigator.pop(
               context,
               _SpendDraft(

@@ -30,11 +30,41 @@ android {
         versionName = flutter.versionName
     }
 
+    val keystorePath = System.getenv("NUTRIWALLET_KEYSTORE_PATH")
+    val keystorePassword = System.getenv("NUTRIWALLET_KEYSTORE_PASSWORD")
+    val releaseKeyAlias = System.getenv("NUTRIWALLET_KEY_ALIAS")
+    val releaseKeyPassword = System.getenv("NUTRIWALLET_KEY_PASSWORD")
+    val productionRelease = System.getenv("NUTRIWALLET_RELEASE_BUILD") == "true"
+    val signingValues = listOf(
+        keystorePath,
+        keystorePassword,
+        releaseKeyAlias,
+        releaseKeyPassword,
+    )
+    val hasReleaseSigning = signingValues.all { !it.isNullOrBlank() }
+    if (productionRelease && (!hasReleaseSigning || !file(keystorePath!!).exists())) {
+        throw GradleException(
+            "Production release requires NUTRIWALLET_KEYSTORE_PATH, " +
+                "NUTRIWALLET_KEYSTORE_PASSWORD, NUTRIWALLET_KEY_ALIAS, " +
+                "and NUTRIWALLET_KEY_PASSWORD.",
+        )
+    }
+    if (hasReleaseSigning) {
+        signingConfigs.create("release") {
+            storeFile = file(keystorePath!!)
+            storePassword = keystorePassword
+            this.keyAlias = releaseKeyAlias
+            this.keyPassword = releaseKeyPassword
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             // Keep optional ML Kit language bindings intact for the demo artifact.
             isMinifyEnabled = false
             isShrinkResources = false

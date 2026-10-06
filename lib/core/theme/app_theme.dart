@@ -20,7 +20,6 @@ ThemeData buildAppTheme() {
     useMaterial3: true,
     colorScheme: scheme,
     scaffoldBackgroundColor: AppColors.surfaceLight,
-    fontFamily: 'Inter',
     textTheme: const TextTheme(
       headlineLarge: TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
       headlineMedium: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),

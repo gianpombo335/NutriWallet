@@ -25,6 +25,14 @@ security definer
 set search_path = public
 as $$
 begin
+  if p_meal_status not in ('planned', 'eaten', 'substitute', 'skipped')
+     or p_actual_cost_cents < 0
+     or (p_meal_status = 'substitute' and
+         (p_actual_cost_cents is null or nullif(trim(p_substitute_name), '') is null))
+     or (p_meal_status = 'skipped' and
+         (p_actual_cost_cents is not null or p_substitute_name is not null)) then
+    return false;
+  end if;
   update public.meal_slots
   set meal_status = p_meal_status,
       actual_cost_cents = p_actual_cost_cents,

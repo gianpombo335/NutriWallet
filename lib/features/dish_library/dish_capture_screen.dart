@@ -47,6 +47,7 @@ class _DishCaptureScreenState extends ConsumerState<DishCaptureScreen> {
       maxHeight: 1280,
     );
     if (photo == null) return;
+    if (!mounted) return;
     setState(() {
       _photo = photo;
       _recognized = null;
@@ -106,7 +107,12 @@ class _DishCaptureScreenState extends ConsumerState<DishCaptureScreen> {
     final profile = ref.read(currentProfileProvider).value;
     final recognized = _recognized;
     final price = double.tryParse(_priceController.text);
-    if (profile == null || recognized == null || price == null || price < 0) {
+    if (profile == null ||
+        recognized == null ||
+        price == null ||
+        !price.isFinite ||
+        price < 0 ||
+        price > 1000000) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -178,12 +184,16 @@ class _DishCaptureScreenState extends ConsumerState<DishCaptureScreen> {
     final photo = await _picker.pickImage(
       source: ImageSource.gallery,
       imageQuality: 80,
+      maxWidth: 1600,
+      maxHeight: 1600,
     );
     if (photo == null) return;
+    if (!mounted) return;
     await _scanReceiptPhoto(photo);
   }
 
   Future<void> _scanReceiptPhoto(XFile photo) async {
+    if (!mounted) return;
     setState(() {
       _photo = photo;
       _recognized = null;

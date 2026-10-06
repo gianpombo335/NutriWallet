@@ -147,4 +147,21 @@ void main() {
       );
     }
   });
+
+  test('simple rotation focus prefers a compact dish set', () {
+    final result = const MealPlanningEngine().generateWeeklyPlan(
+      dishes: dishes,
+      budgetCents: 2000,
+      nutritionTargets: target,
+      exclusions: {},
+      days: [1, 2, 3, 4, 5, 6, 7],
+      mealsPerDay: 1,
+      focus: PlanningFocus.quick,
+    );
+
+    expect(
+      result.assignments.map((item) => item.dish.id).toSet().length,
+      lessThanOrEqualTo(3),
+    );
+  });
 }

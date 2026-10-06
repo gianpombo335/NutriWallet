@@ -1,4 +1,5 @@
 import '../../nutrition_goal/domain/nutrition_models.dart';
+import '../../../core/allergy/dish_allergy_matcher.dart';
 import 'planner_models.dart';
 
 class MealPlanningEngine {
@@ -17,7 +18,13 @@ class MealPlanningEngine {
     List<int> preferredDishIds = const [],
   }) {
     final candidates = dishes
-        .where((dish) => !_isExcluded(dish, exclusions))
+        .where(
+          (dish) => !dishMatchesAllergy(
+            dishName: dish.name,
+            ingredients: dish.ingredients,
+            exclusions: exclusions,
+          ),
+        )
         .toList(growable: false);
     final assignments = <MealSlotAssignment>[];
     var remainingBudget = budgetCents;
@@ -69,7 +76,7 @@ class MealPlanningEngine {
       }
     }
 
-    _refine(assignments, candidates, budgetCents, nutritionTargets);
+    _refine(assignments, candidates, budgetCents, nutritionTargets, focus);
     final totalCost = assignments.fold<int>(
       0,
       (sum, item) => sum + item.dish.roundedPriceCents,
@@ -78,18 +85,6 @@ class MealPlanningEngine {
       assignments: List.unmodifiable(assignments),
       totalCostCents: totalCost,
       isOverBudget: totalCost > budgetCents,
-    );
-  }
-
-  bool _isExcluded(PlannerDish dish, Set<String> exclusions) {
-    final searchable = <String>[
-      dish.name,
-      ...dish.ingredients,
-    ].join(' ').toLowerCase();
-    return exclusions.any(
-      (exclusion) =>
-          exclusion.trim().isNotEmpty &&
-          searchable.contains(exclusion.trim().toLowerCase()),
     );
   }
 
@@ -111,10 +106,14 @@ class MealPlanningEngine {
       PlanningFocus.budget => budgetSafety * 2,
       PlanningFocus.highProtein => dish.proteinG / 40,
       PlanningFocus.variety => -usedCount * 0.6,
-      PlanningFocus.quick => 0,
+      PlanningFocus.quick => usedCount * 30 - (usedCount == 0 ? 0.2 : 0),
       PlanningFocus.balanced => 0,
     };
-    final repeatPenalty = focus == PlanningFocus.variety ? 1.1 : 0.75;
+    final repeatPenalty = switch (focus) {
+      PlanningFocus.variety => 1.1,
+      PlanningFocus.quick => 0.15,
+      _ => 0.75,
+    };
     final preferredIndex = preferredDishIds.indexOf(dish.id);
     final aiBonus = preferredIndex < 0 || preferredDishIds.isEmpty
         ? 0
@@ -146,11 +145,12 @@ class MealPlanningEngine {
     List<PlannerDish> candidates,
     int budget,
     NutritionTargets target,
+    PlanningFocus focus,
   ) {
     if (assignments.length < 2) return;
     var iteration = 0;
     while (iteration++ < maxRefinementIterations) {
-      final before = _objective(assignments, target);
+      final before = _objective(assignments, target, focus);
       var improved = false;
       for (var index = 0; index < assignments.length && !improved; index++) {
         final current = assignments[index].dish;
@@ -171,7 +171,7 @@ class MealPlanningEngine {
             dish: candidate,
             reason: _reasonFor(candidate, budget - proposedCost, target),
           );
-          final after = _objective(assignments, target);
+          final after = _objective(assignments, target, focus);
           if (after > before + 0.0001) {
             improved = true;
             break;
@@ -198,6 +198,7 @@ class MealPlanningEngine {
   double _objective(
     List<MealSlotAssignment> assignments,
     NutritionTargets target,
+    PlanningFocus focus,
   ) {
     final totals = assignments.fold(
       const NutritionTargets(calories: 0, proteinG: 0, carbsG: 0, fatG: 0),
@@ -214,7 +215,10 @@ class MealPlanningEngine {
     final diversity = assignments.isEmpty
         ? 0
         : uniqueCount / assignments.length;
-    return _fitScore(totals, target) + diversity * 0.45;
+    final focusScore = focus == PlanningFocus.quick
+        ? (1 - diversity) * 0.45
+        : diversity * 0.45;
+    return _fitScore(totals, target) + focusScore;
   }
 
   int _totalCost(List<MealSlotAssignment> assignments) =>

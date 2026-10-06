@@ -39,6 +39,7 @@ supabase/.temp/
 
 # Local machine configuration
 android/local.properties
+android/key.properties
 ios/Flutter/ephemeral/
 *.env
 *.env.*

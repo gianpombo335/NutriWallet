@@ -8,7 +8,7 @@ Requirements:
 
 - Flutter 3.47 or newer on the stable channel
 - Dart 3.13 or newer
-- Android API 26+ or iOS 13+
+- Android API 26+ or iOS 15+
 
 ```text
 flutter pub get
@@ -24,6 +24,11 @@ Every app build requires the Supabase project URL and publishable key through Da
 flutter run --dart-define=SUPABASE_URL=https://project.supabase.co --dart-define=SUPABASE_ANON_KEY=...
 flutter build apk --release --dart-define=SUPABASE_URL=https://project.supabase.co --dart-define=SUPABASE_ANON_KEY=...
 ```
+
+For a local Windows release build, set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and
+the four `NUTRIWALLET_*` signing variables as environment variables, then run
+`./build_release.ps1`. The script refuses to build an artifact when configuration
+or production signing is missing, and validates the APK signature and checksum.
 
 The app fails at startup when either define is missing. Authentication, nutrition lookup, vision recognition, smart-plan recommendations, and synchronization use the deployed Supabase services.
 
@@ -56,4 +61,4 @@ Vision and USDA provider keys must remain server-side in Supabase Edge Functions
 
 - Photo and menu recognition use the authenticated Gemini proxy; failed requests show a retry state rather than switching providers.
 - Budget entries and the planned-vs-actual chart are implemented; analytics now scopes entries to the active week.
-- Native notifications and weekly Workmanager regeneration are implemented. USDA, Gemini vision, and sync proxy Edge Functions are deployed; authenticated end-to-end app testing remains pending. Pending device writes remain queued until the authenticated sync endpoint accepts them.
+- Native notifications and weekly Workmanager regeneration are implemented. USDA, Gemini vision, smart-plan, and sync proxy Edge Functions are deployed. Connected Android smoke testing covers the main authenticated flows; real confirmation-email delivery, physical-device validation, iOS validation, and production signing remain pending. Pending device writes remain queued until the authenticated sync endpoint accepts them.

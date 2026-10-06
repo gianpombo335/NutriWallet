@@ -29,6 +29,9 @@ security definer
 set search_path = public
 as $$
 begin
+  if p_total_projected_cost_cents < 0 or p_version < 1 then
+    return false;
+  end if;
   if p_operation = 'delete' then
     delete from public.generated_plans
     where user_id = p_user_id and local_id = p_entity_id;
@@ -80,6 +83,9 @@ security definer
 set search_path = public
 as $$
 begin
+  if p_amount_cents < 0 then
+    return false;
+  end if;
   if p_operation = 'delete' then
     delete from public.budget_entries
     where user_id = p_user_id and local_id = p_entity_id;

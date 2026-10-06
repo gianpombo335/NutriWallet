@@ -50,12 +50,30 @@ class MealSlotAssignment {
     required this.slotIndex,
     required this.dish,
     required this.reason,
+    this.servings = 1,
   });
 
   final int dayIndex;
   final int slotIndex;
   final PlannerDish dish;
   final String reason;
+  final double servings;
+
+  NutritionTargets get nutrition => dish.nutrition * servings;
+
+  int get plannedCostCents => (dish.roundedPriceCents * servings).round();
+
+  MealSlotAssignment copyWith({
+    PlannerDish? dish,
+    String? reason,
+    double? servings,
+  }) => MealSlotAssignment(
+    dayIndex: dayIndex,
+    slotIndex: slotIndex,
+    dish: dish ?? this.dish,
+    reason: reason ?? this.reason,
+    servings: servings ?? this.servings,
+  );
 }
 
 class GeneratedMealPlan {
@@ -68,6 +86,16 @@ class GeneratedMealPlan {
   final List<MealSlotAssignment> assignments;
   final int totalCostCents;
   final bool isOverBudget;
+
+  GeneratedMealPlan copyWith({
+    List<MealSlotAssignment>? assignments,
+    int? totalCostCents,
+    bool? isOverBudget,
+  }) => GeneratedMealPlan(
+    assignments: assignments ?? this.assignments,
+    totalCostCents: totalCostCents ?? this.totalCostCents,
+    isOverBudget: isOverBudget ?? this.isOverBudget,
+  );
 }
 
 class PlanNutritionSummary {
@@ -89,10 +117,10 @@ class PlanNutritionSummary {
     return assignments.fold(
       const PlanNutritionSummary(calories: 0, proteinG: 0, carbsG: 0, fatG: 0),
       (total, assignment) => PlanNutritionSummary(
-        calories: total.calories + assignment.dish.calories,
-        proteinG: total.proteinG + assignment.dish.proteinG,
-        carbsG: total.carbsG + assignment.dish.carbsG,
-        fatG: total.fatG + assignment.dish.fatG,
+        calories: total.calories + assignment.nutrition.calories,
+        proteinG: total.proteinG + assignment.nutrition.proteinG,
+        carbsG: total.carbsG + assignment.nutrition.carbsG,
+        fatG: total.fatG + assignment.nutrition.fatG,
       ),
     );
   }

@@ -63,9 +63,18 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
     final weight = double.tryParse(_weightController.text);
     final height = double.tryParse(_heightController.text);
     final age = int.tryParse(_ageController.text);
-    if (budget == null || budget < 0 || _activeDays.isEmpty) {
+    if (budget == null ||
+        !budget.isFinite ||
+        budget < 0 ||
+        budget > 10000000 ||
+        _activeDays.isEmpty ||
+        !_validOptional(weight, _weightController.text, 1, 500) ||
+        !_validOptional(height, _heightController.text, 50, 250) ||
+        !_validOptionalInt(age, _ageController.text, 13, 120)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid budget and select a day.')),
+        const SnackBar(
+          content: Text('Enter valid profile values and select a day.'),
+        ),
       );
       return;
     }
@@ -263,4 +272,16 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
     6: 'Sat',
     7: 'Sun',
   }[day]!;
+}
+
+bool _validOptional(double? value, String raw, double minimum, double maximum) {
+  final text = raw.trim();
+  return text.isEmpty ||
+      (value != null && value.isFinite && value >= minimum && value <= maximum);
+}
+
+bool _validOptionalInt(int? value, String raw, int minimum, int maximum) {
+  final text = raw.trim();
+  return text.isEmpty ||
+      (value != null && value >= minimum && value <= maximum);
 }

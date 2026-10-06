@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 
+import '../../core/allergy/dish_allergy_matcher.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/currency/app_currency.dart';
@@ -23,6 +24,7 @@ class WeeklyPlanScreen extends ConsumerStatefulWidget {
 
 class _WeeklyPlanScreenState extends ConsumerState<WeeklyPlanScreen> {
   GeneratedMealPlan? _plan;
+  int? _activePlanId;
   NutritionTargets? _target;
   PlanningFocus _focus = PlanningFocus.balanced;
   bool _busy = false;
@@ -51,6 +53,7 @@ class _WeeklyPlanScreenState extends ConsumerState<WeeklyPlanScreen> {
       if (mounted) {
         setState(() {
           _plan = plan;
+          _activePlanId = active.id;
           _target = _targetsFor(profile) * _activeDayCount(profile).toDouble();
           _focus = PlanningFocus.values.firstWhere(
             (focus) => focus.name == active.planningFocus,
@@ -114,20 +117,22 @@ class _WeeklyPlanScreenState extends ConsumerState<WeeklyPlanScreen> {
               .toSet();
       final days = _daysFor(profile);
       final targets = _targetsFor(profile) * days.length.toDouble();
-      final preferredDishIds = await ref
-          .read(smartPlanServiceProvider)
-          .recommendDishIds(
-            dishes: dishes,
-            focus: _focus,
-            budgetCents: profile.weeklyBudgetCents,
-            targets: targets,
-            days: days,
-            mealsPerDay: profile.mealsPerDay,
-            exclusions: exclusions,
-            currencyCode: ref.read(currencyProvider).code,
-          );
-      if (preferredDishIds.isEmpty) {
-        throw StateError('Gemini returned an invalid meal plan.');
+      var preferredDishIds = const <int>[];
+      try {
+        preferredDishIds = await ref
+            .read(smartPlanServiceProvider)
+            .recommendDishIds(
+              dishes: dishes,
+              focus: _focus,
+              budgetCents: profile.weeklyBudgetCents,
+              targets: targets,
+              days: days,
+              mealsPerDay: profile.mealsPerDay,
+              exclusions: exclusions,
+              currencyCode: ref.read(currencyProvider).code,
+            );
+      } catch (_) {
+        // AI recommendations are optional; the local planner remains usable.
       }
       final plan = const MealPlanningEngine().generateWeeklyPlan(
         dishes: dishes,
@@ -140,7 +145,7 @@ class _WeeklyPlanScreenState extends ConsumerState<WeeklyPlanScreen> {
         preferredDishIds: preferredDishIds,
       );
       _validateGeneratedPlan(plan, targets, days.length * profile.mealsPerDay);
-      await ref
+      final savedPlan = await ref
           .read(mealPlanRepositoryProvider)
           .savePlan(
             profileId: profile.id,
@@ -152,6 +157,7 @@ class _WeeklyPlanScreenState extends ConsumerState<WeeklyPlanScreen> {
       if (mounted) {
         setState(() {
           _plan = plan;
+          _activePlanId = savedPlan.id;
           _target = targets;
           _smartUsed = preferredDishIds.isNotEmpty;
         });
@@ -172,6 +178,152 @@ class _WeeklyPlanScreenState extends ConsumerState<WeeklyPlanScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _replaceMeal(
+    UserProfile profile,
+    MealSlotAssignment assignment,
+  ) async {
+    final dishes = await ref
+        .read(dishRepositoryProvider)
+        .plannerDishes(profile.id);
+    final exclusions =
+        (await ref.read(profileDaoProvider).allergensForProfile(profile.id))
+            .map((tag) => tag.label.trim().toLowerCase())
+            .where((tag) => tag.isNotEmpty)
+            .toSet();
+    final choices = dishes
+        .where(
+          (dish) =>
+              dish.id != assignment.dish.id && !_isExcluded(dish, exclusions),
+        )
+        .toList();
+    if (!mounted) return;
+    if (choices.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No other eligible dishes are available.'),
+        ),
+      );
+      return;
+    }
+    final selected = await showModalBottomSheet<PlannerDish>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView.separated(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          itemCount: choices.length,
+          separatorBuilder: (_, index) => const Divider(height: 1),
+          itemBuilder: (context, index) {
+            final dish = choices[index];
+            return ListTile(
+              title: Text(dish.name),
+              subtitle: Text(
+                '${dish.calories.round()} kcal  •  '
+                '${dish.proteinG.round()} g protein  •  '
+                '${dish.carbsG.round()} g carbs  •  '
+                '${dish.fatG.round()} g fat',
+              ),
+              trailing: Text(
+                ref.read(currencyProvider).formatCents(dish.roundedPriceCents),
+              ),
+              onTap: () => Navigator.pop(context, dish),
+            );
+          },
+        ),
+      ),
+    );
+    if (selected != null) {
+      await _applyMealEdit(
+        profile,
+        assignment,
+        dish: selected,
+        servings: assignment.servings,
+      );
+    }
+  }
+
+  Future<void> _changeServings(
+    UserProfile profile,
+    MealSlotAssignment assignment,
+    double delta,
+  ) async {
+    final servings = (assignment.servings + delta).clamp(0.5, 20.0).toDouble();
+    if (servings == assignment.servings) return;
+    await _applyMealEdit(
+      profile,
+      assignment,
+      dish: assignment.dish,
+      servings: servings,
+    );
+  }
+
+  Future<void> _applyMealEdit(
+    UserProfile profile,
+    MealSlotAssignment assignment, {
+    required PlannerDish dish,
+    required double servings,
+  }) async {
+    final currentPlan = _plan;
+    final planId = _activePlanId;
+    if (currentPlan == null || planId == null) return;
+    final index = currentPlan.assignments.indexWhere(
+      (item) =>
+          item.dayIndex == assignment.dayIndex &&
+          item.slotIndex == assignment.slotIndex,
+    );
+    if (index < 0) return;
+    final updatedAssignment = assignment.copyWith(
+      dish: dish,
+      servings: servings,
+      reason: 'manually adjusted',
+    );
+    final updatedAssignments = [...currentPlan.assignments];
+    updatedAssignments[index] = updatedAssignment;
+    final totalCostCents = updatedAssignments.fold<int>(
+      0,
+      (sum, item) => sum + item.plannedCostCents,
+    );
+    final updatedPlan = currentPlan.copyWith(
+      assignments: updatedAssignments,
+      totalCostCents: totalCostCents,
+      isOverBudget: totalCostCents > profile.weeklyBudgetCents,
+    );
+    setState(() {
+      _plan = updatedPlan;
+      _busy = true;
+    });
+    try {
+      await ref
+          .read(mealPlanRepositoryProvider)
+          .updateMealSlotPlan(
+            profileId: profile.id,
+            planId: planId,
+            dayIndex: assignment.dayIndex,
+            slotIndex: assignment.slotIndex,
+            dish: dish,
+            servings: servings,
+          );
+    } catch (_) {
+      if (mounted) {
+        setState(() => _plan = currentPlan);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not save this plan change.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  bool _isExcluded(PlannerDish dish, Set<String> exclusions) {
+    return dishMatchesAllergy(
+      dishName: dish.name,
+      ingredients: dish.ingredients,
+      exclusions: exclusions,
+    );
   }
 
   void _validateGeneratedPlan(
@@ -258,6 +410,10 @@ class _WeeklyPlanScreenState extends ConsumerState<WeeklyPlanScreen> {
               day: entry.key,
               assignments: entry.value,
               currency: currency,
+              enabled: !_busy,
+              onReplace: (assignment) => _replaceMeal(profile, assignment),
+              onServingsChanged: (assignment, delta) =>
+                  _changeServings(profile, assignment, delta),
             ),
           ),
         ],
@@ -535,11 +691,18 @@ class _DayCard extends StatelessWidget {
     required this.day,
     required this.assignments,
     required this.currency,
+    required this.enabled,
+    required this.onReplace,
+    required this.onServingsChanged,
   });
 
   final int day;
   final List<MealSlotAssignment> assignments;
   final AppCurrency currency;
+  final bool enabled;
+  final Future<void> Function(MealSlotAssignment assignment) onReplace;
+  final Future<void> Function(MealSlotAssignment assignment, double delta)
+  onServingsChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -556,16 +719,80 @@ class _DayCard extends StatelessWidget {
             ),
           ),
           ...assignments.map(
-            (assignment) => ListTile(
-              dense: true,
-              leading: CircleAvatar(
-                radius: 15,
-                child: Text('${assignment.slotIndex + 1}'),
-              ),
-              title: Text(assignment.dish.name),
-              subtitle: Text(assignment.reason),
-              trailing: Text(
-                currency.formatCents(assignment.dish.roundedPriceCents),
+            (assignment) => Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      CircleAvatar(
+                        radius: 15,
+                        child: Text('${assignment.slotIndex + 1}'),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              assignment.dish.name,
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(assignment.reason),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${assignment.nutrition.calories.round()} kcal  •  '
+                              '${assignment.nutrition.proteinG.round()} g protein\n'
+                              '${assignment.nutrition.carbsG.round()} g carbs  •  '
+                              '${assignment.nutrition.fatG.round()} g fat',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                      Text(
+                        currency.formatCents(assignment.plannedCostCents),
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 2,
+                    children: [
+                      const Text('Servings'),
+                      IconButton(
+                        tooltip: 'Decrease servings',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: enabled
+                            ? () => onServingsChanged(assignment, -0.5)
+                            : null,
+                        icon: const Icon(Icons.remove_circle_outline),
+                      ),
+                      Text(
+                        _formatServings(assignment.servings),
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      IconButton(
+                        tooltip: 'Increase servings',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: enabled
+                            ? () => onServingsChanged(assignment, 0.5)
+                            : null,
+                        icon: const Icon(Icons.add_circle_outline),
+                      ),
+                      TextButton.icon(
+                        onPressed: enabled ? () => onReplace(assignment) : null,
+                        icon: const Icon(Icons.swap_horiz),
+                        label: const Text('Replace'),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ),
@@ -574,3 +801,7 @@ class _DayCard extends StatelessWidget {
     );
   }
 }
+
+String _formatServings(double servings) => servings == servings.roundToDouble()
+    ? servings.toStringAsFixed(0)
+    : servings.toStringAsFixed(1);
