@@ -16,6 +16,9 @@ class MealReminder {
   final DateTime scheduledAt;
 }
 
+int mealReminderId(int dayIndex, int slotIndex) =>
+    10000 + dayIndex * 10 + slotIndex;
+
 class NotificationPreferences {
   NotificationPreferences(this._preferences);
 

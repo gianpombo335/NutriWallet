@@ -12,7 +12,9 @@ import '../../data/local/database.dart';
 import 'package:go_router/go_router.dart';
 
 import 'domain/meal_planning_engine.dart';
+import 'domain/meal_schedule.dart';
 import 'domain/planner_models.dart';
+import 'meal_check_in.dart';
 import '../nutrition_goal/domain/nutrition_models.dart';
 
 class WeeklyPlanScreen extends ConsumerStatefulWidget {
@@ -24,6 +26,7 @@ class WeeklyPlanScreen extends ConsumerStatefulWidget {
 
 class _WeeklyPlanScreenState extends ConsumerState<WeeklyPlanScreen> {
   GeneratedMealPlan? _plan;
+  GeneratedPlan? _planRecord;
   int? _activePlanId;
   NutritionTargets? _target;
   PlanningFocus _focus = PlanningFocus.balanced;
@@ -53,6 +56,7 @@ class _WeeklyPlanScreenState extends ConsumerState<WeeklyPlanScreen> {
       if (mounted) {
         setState(() {
           _plan = plan;
+          _planRecord = active;
           _activePlanId = active.id;
           _target = _targetsFor(profile) * _activeDayCount(profile).toDouble();
           _focus = PlanningFocus.values.firstWhere(
@@ -157,6 +161,7 @@ class _WeeklyPlanScreenState extends ConsumerState<WeeklyPlanScreen> {
       if (mounted) {
         setState(() {
           _plan = plan;
+          _planRecord = savedPlan;
           _activePlanId = savedPlan.id;
           _target = targets;
           _smartUsed = preferredDishIds.isNotEmpty;
@@ -195,7 +200,10 @@ class _WeeklyPlanScreenState extends ConsumerState<WeeklyPlanScreen> {
     final choices = dishes
         .where(
           (dish) =>
-              dish.id != assignment.dish.id && !_isExcluded(dish, exclusions),
+              !assignment.mealComponents.any(
+                (item) => item.dish.id == dish.id,
+              ) &&
+              !_isExcluded(dish, exclusions),
         )
         .toList();
     if (!mounted) return;
@@ -243,6 +251,96 @@ class _WeeklyPlanScreenState extends ConsumerState<WeeklyPlanScreen> {
         servings: assignment.servings,
       );
     }
+  }
+
+  Future<void> _addDish(
+    UserProfile profile,
+    MealSlotAssignment assignment,
+  ) async {
+    final dishes = await ref
+        .read(dishRepositoryProvider)
+        .plannerDishes(profile.id);
+    final exclusions =
+        (await ref.read(profileDaoProvider).allergensForProfile(profile.id))
+            .map((tag) => tag.label.trim().toLowerCase())
+            .where((tag) => tag.isNotEmpty)
+            .toSet();
+    final choices = dishes
+        .where(
+          (dish) =>
+              !assignment.mealComponents.any(
+                (item) => item.dish.id == dish.id,
+              ) &&
+              !_isExcluded(dish, exclusions),
+        )
+        .toList();
+    if (!mounted) return;
+    if (choices.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No other eligible dishes are available.'),
+        ),
+      );
+      return;
+    }
+    final selected = await showModalBottomSheet<PlannerDish>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView.separated(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          itemCount: choices.length,
+          separatorBuilder: (_, index) => const Divider(height: 1),
+          itemBuilder: (context, index) {
+            final dish = choices[index];
+            return ListTile(
+              title: Text(dish.name),
+              subtitle: Text(
+                '${dish.calories.round()} kcal · ${dish.proteinG.round()} g protein',
+              ),
+              trailing: Text(
+                ref.read(currencyProvider).formatCents(dish.roundedPriceCents),
+              ),
+              onTap: () => Navigator.pop(context, dish),
+            );
+          },
+        ),
+      ),
+    );
+    if (selected == null) return;
+    final updated = assignment.copyWith(
+      components: [
+        ...assignment.mealComponents,
+        MealSlotComponent(dish: selected),
+      ],
+      reason: 'manually adjusted',
+    );
+    await _applyMealComponents(profile, assignment, updated.mealComponents);
+  }
+
+  Future<void> _removeDish(
+    UserProfile profile,
+    MealSlotAssignment assignment,
+    int componentIndex,
+  ) async {
+    if (assignment.mealComponents.length <= 1) return;
+    final components = [...assignment.mealComponents]..removeAt(componentIndex);
+    await _applyMealComponents(profile, assignment, components);
+  }
+
+  Future<void> _changeComponentServings(
+    UserProfile profile,
+    MealSlotAssignment assignment,
+    int componentIndex,
+    double delta,
+  ) async {
+    final components = [...assignment.mealComponents];
+    final current = components[componentIndex];
+    final servings = (current.servings + delta).clamp(0.5, 20.0).toDouble();
+    if (servings == current.servings) return;
+    components[componentIndex] = current.copyWith(servings: servings);
+    await _applyMealComponents(profile, assignment, components);
   }
 
   Future<void> _changeServings(
@@ -298,13 +396,12 @@ class _WeeklyPlanScreenState extends ConsumerState<WeeklyPlanScreen> {
     try {
       await ref
           .read(mealPlanRepositoryProvider)
-          .updateMealSlotPlan(
+          .updateMealSlotComponents(
             profileId: profile.id,
             planId: planId,
             dayIndex: assignment.dayIndex,
             slotIndex: assignment.slotIndex,
-            dish: dish,
-            servings: servings,
+            components: updatedAssignment.mealComponents,
           );
     } catch (_) {
       if (mounted) {
@@ -318,11 +415,86 @@ class _WeeklyPlanScreenState extends ConsumerState<WeeklyPlanScreen> {
     }
   }
 
+  Future<void> _applyMealComponents(
+    UserProfile profile,
+    MealSlotAssignment assignment,
+    List<MealSlotComponent> components,
+  ) async {
+    final currentPlan = _plan;
+    final planId = _activePlanId;
+    if (currentPlan == null || planId == null) return;
+    final index = currentPlan.assignments.indexWhere(
+      (item) =>
+          item.dayIndex == assignment.dayIndex &&
+          item.slotIndex == assignment.slotIndex,
+    );
+    if (index < 0) return;
+    final updatedAssignment = assignment.copyWith(
+      components: components,
+      reason: 'manually adjusted',
+    );
+    final updatedAssignments = [...currentPlan.assignments];
+    updatedAssignments[index] = updatedAssignment;
+    final totalCostCents = updatedAssignments.fold<int>(
+      0,
+      (sum, item) => sum + item.plannedCostCents,
+    );
+    final updatedPlan = currentPlan.copyWith(
+      assignments: updatedAssignments,
+      totalCostCents: totalCostCents,
+      isOverBudget: totalCostCents > profile.weeklyBudgetCents,
+    );
+    setState(() {
+      _plan = updatedPlan;
+      _busy = true;
+    });
+    try {
+      await ref
+          .read(mealPlanRepositoryProvider)
+          .updateMealSlotComponents(
+            profileId: profile.id,
+            planId: planId,
+            dayIndex: assignment.dayIndex,
+            slotIndex: assignment.slotIndex,
+            components: components,
+          );
+    } catch (_) {
+      if (mounted) {
+        setState(() => _plan = currentPlan);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not save this meal change.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   bool _isExcluded(PlannerDish dish, Set<String> exclusions) {
     return dishMatchesAllergy(
       dishName: dish.name,
       ingredients: dish.ingredients,
       exclusions: exclusions,
+    );
+  }
+
+  Future<void> _checkInMeal(
+    UserProfile profile,
+    GeneratedPlan plan,
+    MealSlot slot,
+    MealSchedule schedule,
+    AppCurrency currency, {
+    String? status,
+  }) async {
+    await MealCheckInFlow.show(
+      context: context,
+      budgetRepository: ref.read(budgetRepositoryProvider),
+      profile: profile,
+      plan: plan,
+      slot: slot,
+      schedule: schedule,
+      currency: currency,
+      preferredStatus: status,
     );
   }
 
@@ -377,6 +549,10 @@ class _WeeklyPlanScreenState extends ConsumerState<WeeklyPlanScreen> {
               : 'The online recommendation was unavailable, so the planner generated a validated plan.',
         ),
         const SizedBox(height: AppSpacing.section),
+        if (_plan != null && _activePlanId != null && _planRecord != null)
+          _liveMealDashboard(profile, currency),
+        if (_plan != null && _activePlanId != null && _planRecord != null)
+          const SizedBox(height: AppSpacing.item),
         OutlinedButton.icon(
           onPressed: _openHistory,
           icon: const Icon(Icons.history),
@@ -409,16 +585,137 @@ class _WeeklyPlanScreenState extends ConsumerState<WeeklyPlanScreen> {
             (entry) => _DayCard(
               day: entry.key,
               assignments: entry.value,
+              schedule: MealSchedule.fromJson(
+                profile.mealTimesJson,
+                profile.mealsPerDay,
+              ),
               currency: currency,
               enabled: !_busy,
               onReplace: (assignment) => _replaceMeal(profile, assignment),
               onServingsChanged: (assignment, delta) =>
                   _changeServings(profile, assignment, delta),
+              onAddDish: (assignment) => _addDish(profile, assignment),
+              onRemoveDish: (assignment, index) =>
+                  _removeDish(profile, assignment, index),
+              onComponentServingsChanged: (assignment, index, delta) =>
+                  _changeComponentServings(profile, assignment, index, delta),
             ),
           ),
         ],
       ],
     );
+  }
+
+  Widget _liveMealDashboard(UserProfile profile, AppCurrency currency) {
+    final plan = _planRecord!;
+    final schedule = MealSchedule.fromJson(
+      profile.mealTimesJson,
+      profile.mealsPerDay,
+    );
+    return StreamBuilder<List<MealSlot>>(
+      stream: ref.read(mealPlanRepositoryProvider).watchSlotsForPlan(plan.id),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Card(
+            child: ListTile(
+              leading: const Icon(Icons.error_outline),
+              title: const Text('Current meal unavailable'),
+              subtitle: const Text('Refresh the plan to try again.'),
+              trailing: IconButton(
+                tooltip: 'Refresh meal status',
+                onPressed: _restoreActivePlan,
+                icon: const Icon(Icons.refresh),
+              ),
+            ),
+          );
+        }
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
+          return const Card(
+            child: Padding(
+              padding: EdgeInsets.all(18),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  SizedBox(width: 12),
+                  Text('Loading current meal...'),
+                ],
+              ),
+            ),
+          );
+        }
+        return MealStatusDashboard(
+          plan: plan,
+          slots: snapshot.data ?? const <MealSlot>[],
+          schedule: schedule,
+          currency: currency,
+          mealTitle: _mealTitle,
+          onQuickAction: (slot, status) => _checkInMeal(
+            profile,
+            plan,
+            slot,
+            schedule,
+            currency,
+            status: status,
+          ),
+          onMoreActions: (slot) =>
+              _checkInMeal(profile, plan, slot, schedule, currency),
+          onAutoSkip: (slots) =>
+              _autoSkipMeals(profile, plan, slots, schedule, currency),
+        );
+      },
+    );
+  }
+
+  Future<void> _autoSkipMeals(
+    UserProfile profile,
+    GeneratedPlan plan,
+    List<MealSlot> slots,
+    MealSchedule schedule,
+    AppCurrency currency,
+  ) async {
+    for (final slot in slots) {
+      final updated = await MealCheckInFlow.show(
+        context: context,
+        budgetRepository: ref.read(budgetRepositoryProvider),
+        profile: profile,
+        plan: plan,
+        slot: slot,
+        schedule: schedule,
+        currency: currency,
+        preferredStatus: 'skipped',
+      );
+      if (!updated) throw StateError('Could not auto-skip a meal.');
+    }
+  }
+
+  String _mealTitle(MealSlot slot) {
+    final assignments = _plan?.assignments ?? const <MealSlotAssignment>[];
+    final assignment = assignments.firstWhere(
+      (item) =>
+          item.dayIndex == slot.dayIndex && item.slotIndex == slot.slotIndex,
+      orElse: () => MealSlotAssignment(
+        dayIndex: slot.dayIndex,
+        slotIndex: slot.slotIndex,
+        dish: PlannerDish(
+          id: slot.dishId,
+          name: 'Meal ${slot.slotIndex + 1}',
+          price: slot.plannedCostCents / 100,
+          calories: slot.plannedCalories,
+          proteinG: slot.plannedProteinG,
+          carbsG: slot.plannedCarbsG,
+          fatG: slot.plannedFatG,
+        ),
+        reason: '',
+      ),
+    );
+    return assignment.mealComponents
+        .map((component) => component.dish.name)
+        .join(' + ');
   }
 
   NutritionTargets _targetsFor(UserProfile profile) {
@@ -690,19 +987,33 @@ class _DayCard extends StatelessWidget {
   const _DayCard({
     required this.day,
     required this.assignments,
+    required this.schedule,
     required this.currency,
     required this.enabled,
     required this.onReplace,
     required this.onServingsChanged,
+    required this.onAddDish,
+    required this.onRemoveDish,
+    required this.onComponentServingsChanged,
   });
 
   final int day;
   final List<MealSlotAssignment> assignments;
+  final MealSchedule schedule;
   final AppCurrency currency;
   final bool enabled;
   final Future<void> Function(MealSlotAssignment assignment) onReplace;
   final Future<void> Function(MealSlotAssignment assignment, double delta)
   onServingsChanged;
+  final Future<void> Function(MealSlotAssignment assignment) onAddDish;
+  final Future<void> Function(MealSlotAssignment assignment, int index)
+  onRemoveDish;
+  final Future<void> Function(
+    MealSlotAssignment assignment,
+    int index,
+    double delta,
+  )
+  onComponentServingsChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -737,7 +1048,13 @@ class _DayCard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              assignment.dish.name,
+                              'Meal ${assignment.slotIndex + 1} · ${schedule.labelForSlot(assignment.slotIndex)}',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            Text(
+                              assignment.mealComponents
+                                  .map((component) => component.dish.name)
+                                  .join(' + '),
                               style: Theme.of(context).textTheme.titleMedium,
                             ),
                             const SizedBox(height: 2),
@@ -764,7 +1081,7 @@ class _DayCard extends StatelessWidget {
                     crossAxisAlignment: WrapCrossAlignment.center,
                     spacing: 2,
                     children: [
-                      const Text('Servings'),
+                      const Text('Main servings'),
                       IconButton(
                         tooltip: 'Decrease servings',
                         visualDensity: VisualDensity.compact,
@@ -790,8 +1107,66 @@ class _DayCard extends StatelessWidget {
                         icon: const Icon(Icons.swap_horiz),
                         label: const Text('Replace'),
                       ),
+                      TextButton.icon(
+                        onPressed: enabled ? () => onAddDish(assignment) : null,
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add dish'),
+                      ),
                     ],
                   ),
+                  if (assignment.mealComponents.length > 1)
+                    ...assignment.mealComponents
+                        .asMap()
+                        .entries
+                        .skip(1)
+                        .map(
+                          (entry) => ListTile(
+                            dense: true,
+                            contentPadding: const EdgeInsets.only(left: 42),
+                            title: Text(entry.value.dish.name),
+                            subtitle: Text(
+                              currency.formatCents(
+                                entry.value.plannedCostCents,
+                              ),
+                            ),
+                            trailing: Wrap(
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                IconButton(
+                                  tooltip: 'Decrease servings',
+                                  onPressed: enabled
+                                      ? () => onComponentServingsChanged(
+                                          assignment,
+                                          entry.key,
+                                          -0.5,
+                                        )
+                                      : null,
+                                  icon: const Icon(Icons.remove_circle_outline),
+                                ),
+                                Text(_formatServings(entry.value.servings)),
+                                IconButton(
+                                  tooltip: 'Increase servings',
+                                  onPressed: enabled
+                                      ? () => onComponentServingsChanged(
+                                          assignment,
+                                          entry.key,
+                                          0.5,
+                                        )
+                                      : null,
+                                  icon: const Icon(Icons.add_circle_outline),
+                                ),
+                                IconButton(
+                                  tooltip: 'Remove dish',
+                                  onPressed: enabled
+                                      ? () =>
+                                            onRemoveDish(assignment, entry.key)
+                                      : null,
+                                  icon: const Icon(Icons.delete_outline),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                 ],
               ),
             ),

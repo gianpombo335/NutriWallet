@@ -9,6 +9,7 @@ import '../../data/local/database.dart';
 import '../../data/remote/sync_service.dart';
 import '../nutrition_goal/domain/nutrition_models.dart';
 import '../notifications/notification_service.dart';
+import '../meal_planner/domain/meal_schedule.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -153,6 +154,7 @@ class SettingsScreen extends ConsumerWidget {
               await ref
                   .read(mealReminderSchedulerProvider)
                   .cancel(_ReminderSettingsState._reminderId);
+              await _ReminderSettingsState.cancelMealReminders(ref);
               await ref
                   .read(backgroundPlanSchedulerProvider)
                   .cancelWeeklyRegeneration();
@@ -199,6 +201,7 @@ class _ReminderSettingsState extends ConsumerState<_ReminderSettings> {
       await ref.read(notificationPreferencesProvider).setEnabled(enabled);
       if (!enabled) {
         await ref.read(mealReminderSchedulerProvider).cancel(_reminderId);
+        await cancelMealReminders(ref);
         await ref
             .read(backgroundPlanSchedulerProvider)
             .cancelWeeklyRegeneration();
@@ -215,15 +218,36 @@ class _ReminderSettingsState extends ConsumerState<_ReminderSettings> {
 
   Future<void> _schedule() async {
     try {
-      await ref
-          .read(mealReminderSchedulerProvider)
-          .schedule(
-            MealReminder(
-              id: _reminderId,
-              title: 'Your next planned meal is ready.',
-              scheduledAt: DateTime.now().add(const Duration(minutes: 1)),
-            ),
-          );
+      await cancelMealReminders(ref);
+      final profile = await ref.read(currentProfileProvider.future);
+      final plan = profile == null
+          ? null
+          : await ref.read(mealPlanRepositoryProvider).activePlan(profile.id);
+      final slots = plan == null
+          ? const <MealSlot>[]
+          : await ref.read(mealPlanRepositoryProvider).slotsForPlan(plan.id);
+      final schedule = profile == null
+          ? MealSchedule.forMealsPerDay(3)
+          : MealSchedule.fromJson(profile.mealTimesJson, profile.mealsPerDay);
+      final meals = plan == null
+          ? const <ScheduledMeal>[]
+          : MealScheduleResolver.resolve(
+              plan: plan,
+              slots: slots,
+              schedule: schedule,
+            );
+      final now = DateTime.now();
+      for (final meal in meals.where((meal) => meal.scheduledAt.isAfter(now))) {
+        await ref
+            .read(mealReminderSchedulerProvider)
+            .schedule(
+              MealReminder(
+                id: mealReminderId(meal.slot.dayIndex, meal.slot.slotIndex),
+                title: 'Meal ${meal.slot.slotIndex + 1} is scheduled now.',
+                scheduledAt: meal.scheduledAt,
+              ),
+            );
+      }
       await ref.read(backgroundPlanSchedulerProvider).initialize();
       await ref
           .read(backgroundPlanSchedulerProvider)
@@ -231,7 +255,7 @@ class _ReminderSettingsState extends ConsumerState<_ReminderSettings> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Meal reminder and weekly regeneration scheduled.'),
+            content: Text('Scheduled reminders for your active meal plan.'),
           ),
         );
       }
@@ -247,6 +271,7 @@ class _ReminderSettingsState extends ConsumerState<_ReminderSettings> {
   Future<void> _cancel() async {
     try {
       await ref.read(mealReminderSchedulerProvider).cancel(_reminderId);
+      await cancelMealReminders(ref);
       await ref
           .read(backgroundPlanSchedulerProvider)
           .cancelWeeklyRegeneration();
@@ -262,6 +287,15 @@ class _ReminderSettingsState extends ConsumerState<_ReminderSettings> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Could not cancel reminders.')),
         );
+      }
+    }
+  }
+
+  static Future<void> cancelMealReminders(WidgetRef ref) async {
+    final scheduler = ref.read(mealReminderSchedulerProvider);
+    for (var day = 1; day <= 7; day++) {
+      for (var slot = 0; slot < 5; slot++) {
+        await scheduler.cancel(mealReminderId(day, slot));
       }
     }
   }

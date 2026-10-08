@@ -12,8 +12,11 @@ The app uses Drift/SQLite as a local-first cache and durable outbound sync queue
 - Camera, gallery, menu, and receipt recognition through an authenticated Gemini proxy.
 - Profile-level allergy and ingredient exclusions with hard planner filtering.
 - AI-assisted weekly meal planning with deterministic local validation and fallback planning.
-- Versioned plan history, active-plan selection, serving adjustment, and meal check-ins.
-- Planned-versus-actual budget tracking with USD, PHP, EUR, GBP, and JPY display formats.
+- Versioned plan history, active-plan selection, serving adjustment, and live meal check-ins.
+- Configurable daily meal times with current/next meal reminders.
+- The next planned meal is prioritized; overdue unconfirmed meals are auto-skipped one hour before the next meal.
+- Optional multiple dishes per meal with aggregated nutrition and cost.
+- Planned-versus-actual budget tracking with USD, PHP, EUR, GBP, and JPY display formats, plus linked meal outcomes.
 - Local reminder scheduling and weekly background plan regeneration.
 - Durable outbound sync with connectivity retry and timestamp-based conflict handling.
 
@@ -83,7 +86,7 @@ The latest recorded validation includes:
 flutter analyze
 dart run build_runner build
 dart format --output=none --set-exit-if-changed lib test
-flutter test --coverage                  # 55 tests
+  flutter test --coverage                  # 60 local tests
 flutter build apk --debug
 flutter build apk --release
 flutter build appbundle --release
@@ -91,7 +94,7 @@ npx supabase db lint --linked
 npx supabase functions list               # four expected functions ACTIVE
 ```
 
-Connected Android API 36 emulator smoke coverage includes sign-in, profile setup, manual dish creation, USDA nutrition enrichment, photo recognition, Gemini planning, plan history/detail, serving adjustment, budget expenses, notification permission and scheduling, sync, and sign-out/re-login. No fatal application exception was observed in the recorded launch log scan.
+Connected Android API 36 emulator smoke coverage includes sign-in, profile setup, manual dish creation, USDA nutrition enrichment, photo recognition, Gemini planning, plan history/detail, serving adjustment, budget expenses, meal check-in controls, notification permission and scheduling, sync, and sign-out/re-login. No fatal application exception was observed in the recorded launch log scan.
 
 Release artifacts recorded in the latest validation were debug-signed because no production keystore was configured. The production release script correctly rejects debug signing.
 
@@ -100,11 +103,11 @@ Release artifacts recorded in the latest validation were debug-signed because no
 - iOS has not been built or runtime-tested; macOS and Xcode validation are still required.
 - Android physical-device testing and broader Android-version coverage remain open.
 - Real confirmation-email delivery still needs a mailbox smoke test.
-- Notification delivery and weekly background execution have not been verified; Settings currently schedules a demonstration reminder one minute ahead.
+- Notification delivery and weekly background execution have not been verified; Settings now schedules future active-plan meal reminders.
 - Sync currently pushes local changes outbound; remote-to-local pull and merge for new devices are not implemented.
 - Dish photos are stored as local file paths and are not uploaded to Supabase Storage.
 - Recognition requires a network connection and has no native ML Kit fallback.
-- The newest sync conflict-hardening migration requires remote application verification.
+- The newest meal-schedule and budget-link migrations were applied remotely; migration-list inspection requires the linked database password.
 - Production signing, privacy text, accessibility, and large-library performance still need review.
 
 ## Documentation

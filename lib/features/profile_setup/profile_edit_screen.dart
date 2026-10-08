@@ -7,6 +7,7 @@ import '../../core/constants/app_spacing.dart';
 import '../../core/providers.dart';
 import '../../data/local/database.dart';
 import '../../data/remote/sync_service.dart';
+import '../meal_planner/domain/meal_schedule.dart';
 
 class ProfileEditScreen extends ConsumerStatefulWidget {
   const ProfileEditScreen({super.key});
@@ -22,6 +23,7 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
   final _ageController = TextEditingController();
   Set<int> _activeDays = {1, 2, 3, 4, 5, 6, 7};
   int _mealsPerDay = 3;
+  late MealSchedule _mealSchedule;
   String _goal = 'balanced';
   String _activity = 'moderate';
   String _sex = 'male';
@@ -53,6 +55,10 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
         .toSet();
     if (_activeDays.isEmpty) _activeDays = {1, 2, 3, 4, 5, 6, 7};
     _mealsPerDay = profile.mealsPerDay;
+    _mealSchedule = MealSchedule.fromJson(
+      profile.mealTimesJson,
+      profile.mealsPerDay,
+    );
     _goal = profile.goalPreset;
     _activity = profile.activityLevel;
     _sex = profile.sex ?? 'male';
@@ -87,6 +93,7 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
           weeklyBudgetCents: Value((budget * 100).round()),
           activeDays: Value((_activeDays.toList()..sort()).join(',')),
           mealsPerDay: Value(_mealsPerDay),
+          mealTimesJson: Value(_mealSchedule.json),
           weightKg: Value(weight),
           heightCm: Value(height),
           age: Value(age),
@@ -159,7 +166,30 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
                   ),
                 )
                 .toList(),
-            onChanged: (value) => setState(() => _mealsPerDay = value ?? 3),
+            onChanged: (value) {
+              final meals = value ?? 3;
+              setState(() {
+                _mealsPerDay = meals;
+                _mealSchedule = MealSchedule.forMealsPerDay(meals);
+              });
+            },
+          ),
+          const SizedBox(height: AppSpacing.item),
+          Text('Meal times', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 6),
+          const Text('These times repeat on each active day.'),
+          const SizedBox(height: 8),
+          ...List.generate(
+            _mealsPerDay,
+            (index) => ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: CircleAvatar(child: Text('${index + 1}')),
+              title: Text('Meal ${index + 1}'),
+              trailing: TextButton(
+                onPressed: () => _pickMealTime(index),
+                child: Text(_mealSchedule.labelForSlot(index)),
+              ),
+            ),
           ),
           const SizedBox(height: AppSpacing.item),
           Text('Active days', style: Theme.of(context).textTheme.titleMedium),
@@ -272,6 +302,22 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
     6: 'Sat',
     7: 'Sun',
   }[day]!;
+
+  Future<void> _pickMealTime(int index) async {
+    final minutes = _mealSchedule.minutesAfterMidnight[index];
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: minutes ~/ 60, minute: minutes % 60),
+    );
+    if (picked != null) {
+      setState(() {
+        _mealSchedule = _mealSchedule.withTime(
+          index,
+          DateTime(2026, 1, 1, picked.hour, picked.minute),
+        );
+      });
+    }
+  }
 }
 
 bool _validOptional(double? value, String raw, double minimum, double maximum) {

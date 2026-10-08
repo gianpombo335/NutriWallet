@@ -44,6 +44,23 @@ class PlannerDish {
   );
 }
 
+class MealSlotComponent {
+  const MealSlotComponent({required this.dish, this.servings = 1});
+
+  final PlannerDish dish;
+  final double servings;
+
+  NutritionTargets get nutrition => dish.nutrition * servings;
+
+  int get plannedCostCents => (dish.roundedPriceCents * servings).round();
+
+  MealSlotComponent copyWith({PlannerDish? dish, double? servings}) =>
+      MealSlotComponent(
+        dish: dish ?? this.dish,
+        servings: servings ?? this.servings,
+      );
+}
+
 class MealSlotAssignment {
   const MealSlotAssignment({
     required this.dayIndex,
@@ -51,6 +68,7 @@ class MealSlotAssignment {
     required this.dish,
     required this.reason,
     this.servings = 1,
+    this.components = const [],
   });
 
   final int dayIndex;
@@ -58,22 +76,52 @@ class MealSlotAssignment {
   final PlannerDish dish;
   final String reason;
   final double servings;
+  final List<MealSlotComponent> components;
 
-  NutritionTargets get nutrition => dish.nutrition * servings;
+  List<MealSlotComponent> get mealComponents => components.isEmpty
+      ? [MealSlotComponent(dish: dish, servings: servings)]
+      : components;
 
-  int get plannedCostCents => (dish.roundedPriceCents * servings).round();
+  NutritionTargets get nutrition => mealComponents.fold(
+    const NutritionTargets(calories: 0, proteinG: 0, carbsG: 0, fatG: 0),
+    (total, component) => NutritionTargets(
+      calories: total.calories + component.nutrition.calories,
+      proteinG: total.proteinG + component.nutrition.proteinG,
+      carbsG: total.carbsG + component.nutrition.carbsG,
+      fatG: total.fatG + component.nutrition.fatG,
+    ),
+  );
+
+  int get plannedCostCents => mealComponents.fold(
+    0,
+    (total, component) => total + component.plannedCostCents,
+  );
 
   MealSlotAssignment copyWith({
     PlannerDish? dish,
     String? reason,
     double? servings,
-  }) => MealSlotAssignment(
-    dayIndex: dayIndex,
-    slotIndex: slotIndex,
-    dish: dish ?? this.dish,
-    reason: reason ?? this.reason,
-    servings: servings ?? this.servings,
-  );
+    List<MealSlotComponent>? components,
+  }) {
+    final updatedDish = dish ?? this.dish;
+    final updatedServings = servings ?? this.servings;
+    final updatedComponents =
+        components ??
+        (dish != null || servings != null
+            ? [
+                MealSlotComponent(dish: updatedDish, servings: updatedServings),
+                ...mealComponents.skip(1),
+              ]
+            : this.components);
+    return MealSlotAssignment(
+      dayIndex: dayIndex,
+      slotIndex: slotIndex,
+      dish: updatedDish,
+      reason: reason ?? this.reason,
+      servings: updatedServings,
+      components: updatedComponents,
+    );
+  }
 }
 
 class GeneratedMealPlan {

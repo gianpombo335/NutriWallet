@@ -1,6 +1,6 @@
 # NutriWallet Progress
 
-Last updated: 2026-10-06
+Last updated: 2026-10-08
 
 ## Overall Status
 
@@ -8,25 +8,25 @@ The app is a connected Flutter app backed by Supabase. Drift remains the authent
 
 ## Resume Here
 
-Current baseline: analyzer, code generation, formatting, coverage tests, Android debug/release compilation, connected release artifacts, linked schema lint, Android emulator launch, and APK/AAB metadata validation pass. The current test suite has 55 passing tests. The APK/AAB produced in this environment are debug-signed because no production keystore is configured; the release script correctly refuses to create a production artifact without signing variables. Real confirmation-email delivery, cloud pull/hydration, physical-device coverage, and iOS validation remain open.
+Current baseline: analyzer, code generation, formatting, tests, configured Android debug/release compilation, connected service smoke, Android emulator UI smoke, linked schema lint, and deployed Edge Function validation pass. The current test suite has 61 passing tests, including the connected service smoke. The APK/AAB produced in this environment are debug-signed because no production keystore is configured; the release script correctly refuses to create a production artifact without signing variables. Real confirmation-email delivery, cloud pull/hydration, physical-device coverage, and iOS validation remain open.
 
-Latest completed work: dish editing with ingredient sync, profile-based allergy warnings, shared allergy matching, safe sign-out queue flushing, special-RPC conflict timestamps, local-date budget fixes, iOS notification permission/timezone setup, background-plan metadata preservation, CI quality automation, and hardened Android release validation.
+Latest completed work: configurable meal schedules, next-prioritized meal dashboards with one-hour auto-skip reconciliation, shared meal check-in actions, multi-dish meals, connected service and emulator smoke coverage, budget-link conflict handling, dish editing with ingredient sync, profile-based allergy warnings, shared allergy matching, safe sign-out queue flushing, special-RPC conflict timestamps, local-date budget fixes, iOS notification permission/timezone setup, background-plan metadata preservation, CI quality automation, and hardened Android release validation.
 
-Recommended next task: configure the production Android keystore, apply and verify the pending Supabase conflict migration, then smoke-test connected sign-up -> email confirmation -> sign-in -> profile setup using a real test mailbox.
+Recommended next task: configure the production Android keystore, then perform physical Android notification/camera validation and iOS validation on macOS.
 
 After device testing: add full authenticated end-to-end coverage, then perform iOS, accessibility, performance, signing, and release checks.
 
 Latest local release APK: `build/app/outputs/flutter-apk/app-release.apk`
 
-Latest local release APK size: 67.1 MB
+Latest local release APK size: 68.0 MB
 
-Latest local release APK SHA-256: `477C7D2D4D35D9CF2ADD5E429644BFC5305966C55ECBD16A31214B63DC8F8A69`
+Latest local release APK SHA-256: `6F1C7D9648D82F8D4B2EED0228798B6D84EB06C1F7FFDCECAE36E58A5AF23C31`
 
 Latest local release App Bundle: `build/app/outputs/bundle/release/app-release.aab`
 
-Latest local release App Bundle size: 64.0 MB
+Latest local release App Bundle size: 64.7 MB
 
-Latest local release App Bundle SHA-256: `9E49EEF6C56507EBDE8C2C15835CEC1A78412C522213D88C46B1953DFE8D8437`
+Latest local release App Bundle SHA-256: `0AF667BE56B5231AEA6A5EDB95440649F56552ED9CDF44104E54F7E32B53C9ED`
 
 Previous local release APK SHA-256: `F233FADEE9362CF6AEC975C445B27CEC412779B2DD7C8BE60D472C1425083033`
 
@@ -86,7 +86,15 @@ Earlier connected release APK SHA-256: `9C60124135249B00BF91F8C7D8ED9D837AFC7C6E
 - [x] iOS 15 deployment target, camera/photo permissions, and Workmanager launch registration configuration
 - [x] Android release version/signing gate and APK/AAB artifact validation script
 - [x] GitHub Actions Flutter, Deno, Android package, and optional Supabase checks
-- [x] `PLAN.md` and `README.md`
+- [x] Printed menu/receipt image capture with Gemini recognition
+- [x] Shared whole-word allergy matching for dish warnings, planner filtering, and Gemini validation
+- [x] Active-plan meal check-ins (eaten, substitute, skipped) with duplicate-safe linked budget entries
+- [x] Live current/next meal dashboards with quick check-in actions in Plan and Budget
+- [x] Next-meal priority with one-hour overdue auto-skip and linked budget cleanup
+- [x] Persisted meal-slot macro snapshots and adjustable servings
+- [x] Safe sign-out that flushes pending sync records before clearing local data
+- [x] Gemini plan-response retry (one retry after 250 ms)
+- [x] `PLAN.md`, `README.md`, `SPRINT.md`, and `contents.md`
 
 ## Verification
 
@@ -96,12 +104,12 @@ Last verified successfully:
 flutter analyze
 dart run build_runner build
 dart format --output=none --set-exit-if-changed lib test
-flutter test --coverage      # 55 tests passed
+ flutter test --coverage      # 61 tests passed, including connected smoke
 flutter build apk --debug    # passed
-flutter build apk --release --build-name=1.0.0 --build-number=2 --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...  # compiled; debug-signed local artifact
-flutter build appbundle --release --build-name=1.0.0 --build-number=2 --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...  # compiled; debug-signed local artifact
-npx supabase migration list --linked  # requires SUPABASE_DB_PASSWORD; pending locally added migration
-npx supabase db lint --linked  # no remote schema errors
+ flutter build apk --release --build-name=1.0.0 --build-number=4 --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...  # compiled; debug-signed local artifact
+ flutter build appbundle --release --build-name=1.0.0 --build-number=4 --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...  # compiled; debug-signed local artifact
+ npx supabase migration list --linked  # requires SUPABASE_DB_PASSWORD for CLI login inspection
+ npx supabase db lint --linked  # no schema errors
 npx supabase functions list  # four expected functions ACTIVE
 ```
 
@@ -114,13 +122,13 @@ build/app/outputs/flutter-apk/app-release.apk
 
 Latest local release APK:
 
-- Size: 67.1 MB
-- SHA-256: `477C7D2D4D35D9CF2ADD5E429644BFC5305966C55ECBD16A31214B63DC8F8A69`
+- Size: 68.0 MB
+- SHA-256: `6F1C7D9648D82F8D4B2EED0228798B6D84EB06C1F7FFDCECAE36E58A5AF23C31`
 
 Latest local release App Bundle:
 
-- Size: 64.0 MB
-- SHA-256: `9E49EEF6C56507EBDE8C2C15835CEC1A78412C522213D88C46B1953DFE8D8437`
+- Size: 64.7 MB
+- SHA-256: `0AF667BE56B5231AEA6A5EDB95440649F56552ED9CDF44104E54F7E32B53C9ED`
 
 ## Known Warnings And Errors
 
@@ -129,9 +137,11 @@ Latest local release App Bundle:
 - Supabase Auth is implemented and authenticated Flutter sign-in, profile setup, and service-backed proxy calls were exercised on the API 36 Android emulator.
 - Supabase email confirmation is now required for connected sign-up. The app handles confirmation-required responses and resend requests; completing the email link still needs a real mailbox smoke test.
 - USDA nutrition, Gemini vision, smart-plan, and sync Edge Functions are deployed and the connected emulator exercised nutrition lookup, photo recognition, planning, and sync actions.
-- The default sync endpoint is in-memory when running without Supabase defines; configured builds use the deployed Supabase sync endpoint.
-- Supabase mirror tables, RLS policies, and atomic server-side conflict handling are deployed; accepted dish and budget syncs now hydrate typed tables, while the remaining entity types stay in `sync_records`.
-- The local migration set now includes `20261006000300_sync_conflict_hardening.sql`; linked schema lint reports no errors, but migration parity and application of this new migration require `SUPABASE_DB_PASSWORD`.
+- Supabase defines are mandatory for every build; there is no in-memory or local-only sync endpoint in the current provider graph. All builds use the deployed Supabase sync endpoint.
+- Supabase mirror tables, RLS policies, and atomic server-side conflict handling are deployed; typed RPCs hydrate profiles, dishes, ingredients, allergens, generated plans, meal slots, and budget entries. Meal schedule, multi-dish component, and budget-link conflict migrations are applied remotely.
+- Dish photos are stored as local file paths only; they are not uploaded to Supabase Storage.
+- Settings schedules future reminders for the active plan's configured meal times; notification delivery has not been verified on a device.
+- The local migration set includes the meal schedule, component, and budget-link conflict migrations; linked schema lint reports no errors, while migration-list inspection requires `SUPABASE_DB_PASSWORD`.
 - Existing local databases migrate to active-plan tracking without losing plan history.
 - Budget actuals are independent from plan cost, can optionally link to the active plan, and can be removed to correct mistakes.
 - Supabase Dart defines are mandatory; missing configuration now stops startup with a configuration error.
@@ -166,6 +176,8 @@ Latest local release App Bundle:
 - [x] Add CI checks for Flutter, Drift generation, coverage, Android packaging, Edge Function type checks, and optional linked Supabase validation
 - [x] Harden specialized sync RPCs with timestamp conflict handling
 - [ ] Implement authenticated remote-to-local pull/hydration for new devices and local recovery
+- [x] Apply and remotely verify the meal schedule, component, and budget-link conflict migrations
+- [ ] Verify the linked project's Auth email-confirmation setting matches the checked-in `supabase/config.toml`
 
 ### Medium Priority
 
@@ -183,6 +195,7 @@ Latest local release App Bundle:
 - [ ] Profile planner performance with 50 dishes and a full seven-day plan
 - [ ] Add end-to-end tests for allergy exclusion, goal switching, photo capture, budget chart, and notifications
 - [ ] Validate connected photo recognition and authenticated sync on a physical Android device
+- [ ] Test notification delivery and weekly background execution, not only permission/scheduling setup
 - [ ] Remove or resolve the Workmanager Kotlin warning
 - [ ] Review release signing, privacy text, and production environment setup
 - [ ] Configure production Android keystore and produce a non-debug-signed APK/AAB
@@ -201,17 +214,30 @@ Latest local release App Bundle:
 - `supabase/migrations/20260912000200_app_schema.sql`: Supabase mirror schema, RLS, and conflict RPC
 - `supabase/migrations/20260917000100_complete_typed_sync.sql`: complete typed-sync RPC and generated-plan active state
 - `supabase/functions/plan-generate/index.ts`: authenticated Gemini plan recommendation proxy
+- `supabase/migrations/20261006000300_sync_conflict_hardening.sql`: timestamp conflict hardening for plan, budget, and meal-consumption RPCs
 - `lib/core/currency/app_currency.dart`: persisted currency options and formatting
+- `contents.md`: implementation inventory and authoritative description of app behavior
+- `SPRINT.md`: ordered sprint summary
 - `lib/features/notifications/background_plan_scheduler.dart`: weekly worker
 
 ## Update Log
+
+### 2026-10-08
+
+- Added a live current/next meal dashboard to Plan with direct Eaten, Substitute, and Skip actions.
+- Added the same quick meal outcomes to the Budget meal timeline while keeping spend analytics primary.
+- Prioritized the next planned meal and auto-skipped overdue planned meals within one hour of that next meal, including linked budget cleanup.
+- Replaced misleading loading/empty states and translucent dashboard surfaces with explicit loading/error states and opaque cards.
+- Shared the meal check-in flow between Plan and Budget and connected it to the existing atomic linked-expense transaction.
+- Added reactive meal-slot streams, dashboard widget coverage, and online check-in regression coverage.
+- `flutter analyze`, formatting, `flutter test --coverage` (61 tests including connected smoke), debug APK, release APK `1.0.0+4`, release AAB `1.0.0+4`, and Android API 36 real-account smoke passed.
 
 ### 2026-09-12
 
 - Built a debug-signed release demo APK with NutriWallet branding and verified the final artifact.
 - Disabled release shrinking for the demo because R8 could not resolve optional ML Kit language bindings.
-- Added concrete ML Kit image-labeling and OCR services with fixture fallbacks.
-- Added optional Supabase Auth with local fallback.
+- Added concrete ML Kit image-labeling and OCR services with fixture fallbacks (later removed: photo and menu recognition now use only the authenticated Gemini proxy and no ML Kit dependency remains).
+- Added optional Supabase Auth with local fallback (superseded: local/demo providers were removed on 2026-10-01 and Supabase is now required).
 - Added generated-plan calorie, protein, carbohydrate, and fat totals with target comparison in the Weekly Plan screen.
 - Added actual budget entries, planned-vs-actual charting, local reminders, and weekly background regeneration.
 - Added durable sync queue and last-write-wins service seam.
@@ -220,11 +246,11 @@ Latest local release App Bundle:
 - Added profile-aware background targets and deployed authenticated USDA, Gemini, and sync Edge Functions.
 - Applied the `sync_records` Supabase migration and verified provider responses through the deployed proxies.
 - Added full profile editing and generated-plan history/detail screens with repository coverage.
-- Added persisted notification preferences, cancellation controls, OCR fallback/retry messaging, and local happy-path integration coverage.
+- Added persisted notification preferences, cancellation controls, OCR fallback/retry messaging (the OCR fallback was later removed with ML Kit), and local happy-path integration coverage.
 - Added testable connectivity restoration sync and Android notification permission requests; 29 tests and Android builds pass.
 - Added the Supabase mirror schema, ownership policies, updated-at triggers, and atomic sync conflict RPC; deployed sync-push version 5.
 - Added typed Supabase hydration for dish and budget sync records; deployed sync-push version 6 and rebuilt the Android artifacts.
-- Added explicit local/cloud mode labels, bounded photo uploads, nutrition failure recovery, and a connected release APK using the configured Supabase project.
+- Added explicit local/cloud mode labels (local mode was later removed), bounded photo uploads, nutrition failure recovery, and a connected release APK using the configured Supabase project.
 - Fixed onboarding step-three save handling, Supabase email-confirmation routing, and silent async failures across auth, profile editing, planning, sync, and reminders; 30 tests pass.
 - Added actionable Supabase Auth error mapping and rebuilt the connected APK; 31 tests pass.
 - Configured the linked Supabase project for standard email/password sessions and rebuilt the connected APK; rate limiting remains enabled.
@@ -273,12 +299,12 @@ Latest local release App Bundle:
 - Polished login with form validation, password visibility and confirmation, and sign-in that honors the configured Supabase password policy instead of enforcing the sign-up minimum.
 - Persisted onboarding completion, routed returning signed-out users directly to auth, and invalidated cached profile state on auth changes.
 - Added repository and widget regression tests for confirmation-required signup, resend, sign-in routing, password mismatch, onboarding, and budget expense editing. Removed local/demo runtime providers and validated the connected APK on the API 36 emulator. `flutter analyze`, formatting, `flutter test --coverage` (41 tests), and connected `flutter build apk --debug` pass.
-- The app flow is covered with test doubles; real Supabase email delivery/confirmation and authenticated sign-in have not yet been exercised on a device.
+- The app flow is covered with test doubles; real Supabase email delivery/confirmation had not yet been exercised on a device. Authenticated sign-in has since been exercised on the API 36 emulator (see Known Warnings And Errors); real email delivery and physical-device sign-in remain open.
 - Fixed all planning focuses to use Gemini with focus-specific instructions, strict slot/ID/exclusion validation, and deployed `plan-generate` updates.
 - Added onboarding currency selection, direct captured-dish navigation to the dishes menu, budget limit editing, dated/editable expenses, active-plan meal check-ins, substitute meal cost tracking, and persisted meal consumption state.
 - Applied the remote `20261001000100_meal_consumption_tracking.sql` migration and redeployed `sync-push`; connected debug APK build passes after the changes.
 - Added plan/budget integrity migration `20261001000200` plus RPC cleanup `20261001000300`; linked schema lint passes with no errors.
-- Added strict trusted Gemini response validation, retry behavior, focus/goal checks, persisted plan focus/currency metadata, duplicate-safe substitute expenses, and expanded meal-plan/Gemini regression coverage. `flutter test --coverage` now passes 43 tests.
+- Added strict trusted Gemini response validation, retry behavior, focus/goal checks, persisted plan focus/currency metadata, duplicate-safe substitute expenses, and expanded meal-plan/Gemini regression coverage (direct retry-behavior coverage remains limited). `flutter test --coverage` now passes 43 tests.
 
 ### 2026-10-04
 
@@ -292,12 +318,13 @@ Latest local release App Bundle:
 ### 2026-10-06
 
 - Re-ran dependency resolution, Drift generation, formatting, analyzer, and `flutter test --coverage`; all 55 tests passed.
-- Built local Android release APK/AAB artifacts with version `1.0.0+2`; APK is 67.1 MB with SHA-256 `477C7D2D4D35D9CF2ADD5E429644BFC5305966C55ECBD16A31214B63DC8F8A69`, and AAB is 64.0 MB with SHA-256 `9E49EEF6C56507EBDE8C2C15835CEC1A78412C522213D88C46B1953DFE8D8437`.
+- Built local Android release APK/AAB artifacts with version `1.0.0+2`; APK is 67.1 MB with SHA-256 `477C7D2D4D35D9CF2ADD5E429644BFC5305966C55ECBD16A31214B63DC8F8A69`, and AAB is 64.0 MB with SHA-256 `9E49EEF6C56507EBDE8C2C15835CEC1A78412C522213D88C46B1953DFE8D8437`. The APK grew from the 50.8 MB artifact recorded on 2026-10-04; the cause has not been investigated.
 - Verified APK package ID/version, AAB structure, and APK signature validation. The local artifacts are debug-signed because production keystore variables are not configured; `build_release.ps1` correctly refuses the production build.
 - Added GitHub Actions quality automation for Flutter, Drift, coverage, Android packaging, Deno Edge Function checks, and optional linked Supabase validation.
 - Added dish editing, profile-based allergy indicators, shared token matching, saved-plan snapshot protection, safe sign-out sync flushing, notification timezone/permission handling, budget date/link fixes, and UI error states.
-- Added local `20261006000300_sync_conflict_hardening.sql`; linked schema lint passed, but migration parity/application requires `SUPABASE_DB_PASSWORD`.
+- Added local `20261006000300_sync_conflict_hardening.sql`; linked schema lint passed, but migration parity/application requires `SUPABASE_DB_PASSWORD`. The 2026-10-04 lint attempt had been blocked by `cli_login_postgres` password authentication; this run passed, while `migration list` still requires the password.
 - Android API 36 release launch completed without a fatal app exception. Real confirmation-email delivery, physical-device validation, iOS validation, background delivery, production signing, cloud pull/hydration, and accessibility checks remain open.
+- Added `contents.md` (implementation inventory) and `SPRINT.md`, and aligned all three documents; `contents.md` is the authoritative description of app behavior.
 
 ## Update Rules
 
@@ -308,3 +335,4 @@ When continuing work:
 3. Check off work only after code and verification are complete.
 4. Add a dated entry to `Update Log` after each meaningful milestone.
 5. Keep this file factual; distinguish implemented code, local fakes, and deployed services.
+6. Keep `SPRINT.md` and `contents.md` consistent with this file. If they differ about app behavior, `contents.md` is authoritative.

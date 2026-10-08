@@ -2,7 +2,7 @@
 
 This document is the implementation inventory for the current NutriWallet app. It describes behavior that exists in the repository, where it is implemented, the algorithms used, and the boundaries between the Flutter client, local SQLite cache, Supabase, and third-party providers.
 
-Status date: 2026-10-06
+Status date: 2026-10-08
 
 ## 1. Product Summary
 
@@ -17,7 +17,10 @@ NutriWallet is a connected Flutter application for planning meals around a user'
 - Save versioned plans and choose one active plan.
 - Track projected plan cost separately from actual grocery spending.
 - Check in planned meals as eaten, substituted, or skipped.
-- Schedule local meal reminders and weekly background regeneration.
+- Set recurring daily times for each meal and schedule reminders from the active plan.
+- Add optional dish components to a meal and aggregate their cost and nutrition.
+- View current and next scheduled meals with quick check-in actions in both Plan and Budget.
+- Prioritize the next planned meal and auto-skip earlier unconfirmed meals within one hour of it, including linked budget cleanup.
 - Queue local changes and push them to Supabase when connectivity is available.
 
 Production authentication and remote services require Supabase configuration. The application fails during startup when `SUPABASE_URL` or `SUPABASE_ANON_KEY` is missing.
@@ -53,7 +56,7 @@ Production authentication and remote services require Supabase configuration. Th
 - iOS declares background fetch and the Workmanager task identifier.
 - Android and iOS are configured for local notification scheduling.
 - iOS notification permission requests and device timezone initialization run before scheduling.
-- The repository supports Android API 26+ and iOS 15+ according to the project documentation.
+- The repository is configured for Android API 24+ and iOS 15+; Android API 36 emulator validation is recorded, while iOS build and runtime validation remain open.
 - iOS cannot be built in the current Windows environment; Xcode/macOS validation remains required.
 
 ## 3. Application Startup And Dependency Graph
@@ -135,6 +138,7 @@ Profile setup stores:
 - Weekly budget in integer cents.
 - Active planning days as a comma-separated day-index string, where Monday is `1` and Sunday is `7`.
 - Meals per day, selectable from 2 through 5.
+- A daily meal-time schedule with one editable time per meal.
 - Nutrition goal: balanced, cutting, bulking, high protein, or keto.
 - Weight in kilograms, height in centimeters, age, and sex.
 - Activity level: sedentary, light, moderate, active, or very active.
@@ -302,7 +306,7 @@ The local schema includes `DishAllergenTags`, but the current UI and planner use
 
 ## 11. Meal Planning System
 
-Implementations: `MealPlanningEngine`, `PlannerDish`, `GeneratedMealPlan`, `WeeklyPlanScreen`, and `GeminiSmartPlanService`.
+Implementations: `MealPlanningEngine`, `PlannerDish`, `MealSlotComponent`, `GeneratedMealPlan`, `WeeklyPlanScreen`, and `GeminiSmartPlanService`.
 
 Supported planning focuses:
 
@@ -404,6 +408,8 @@ The result contains assignments, total cost, and an over-budget flag. The weekly
 
 The plan UI displays projected cost, budget status, slot count, total calories, protein, carbs, and fat against targets, grouped by day.
 
+Each meal slot starts with one generated dish and can contain optional additional dish components. Components have independent servings and snapshots, while the meal slot and weekly plan aggregate their costs and nutrition.
+
 ## 12. AI Smart-Plan Validation
 
 Implementation: `GeminiSmartPlanService` and `supabase/functions/plan-generate/index.ts`.
@@ -452,7 +458,7 @@ When an active saved plan is restored, its slots are joined back to local dishes
 
 ## 14. Meal Consumption And Check-In
 
-Implementation: `MealPlanRepository.updateMealSlot`, the Budget screen check-in UI, and `MealSlots` fields.
+Implementations: `MealCheckInFlow`, `MealStatusDashboard`, `MealPlanRepository`, `BudgetRepository`, and `MealSlots` fields.
 
 Valid statuses:
 
@@ -471,6 +477,8 @@ Rules:
 - A meal status update is scoped through the profile owning the plan.
 - Check-in writes a matching budget entry through an upsert-by-meal-slot path.
 - The database has a unique remote index so one meal slot cannot create duplicate linked expenses.
+- The Plan and Budget dashboards prioritize the nearest future planned meal.
+- When the next planned meal is within one hour, earlier unconfirmed planned meals are auto-skipped and linked budget entries are removed.
 
 ## 15. Budget System
 
@@ -487,6 +495,10 @@ Features:
 - Compare projected plan cost with actual spending.
 - View linked actual spend against active-plan projection.
 - Record planned meal consumption and substitute costs.
+- Highlight the current and next unchecked scheduled meals.
+- Prioritize the next future planned meal and auto-skip earlier unconfirmed meals within one hour of it.
+- Show quick Eaten, Substitute, and Skip actions in the Plan dashboard and Budget timeline.
+- Edit meal outcomes and linked meal expenses from the timeline.
 - Use USD, PHP, EUR, GBP, or JPY display symbols.
 
 Budget totals are integer cents. Currency selection changes display formatting only; it does not perform exchange-rate conversion.
@@ -507,10 +519,10 @@ Implementation: `notification_service.dart`.
 - Android requests notification permission.
 - Android uses a high-importance `meal_reminders` channel.
 - iOS uses Darwin notification settings.
-- Reminders use timezone-aware scheduled dates.
+- Reminders use timezone-aware scheduled dates for future slots in the active plan.
 - Reminders can be cancelled by ID.
 
-The Settings screen uses reminder ID `1001` and schedules a demonstration reminder one minute in the future.
+Settings schedules future meal slots from the active plan using stable day/meal reminder IDs.
 
 ### Weekly regeneration
 
@@ -529,7 +541,7 @@ Implementation: `background_plan_scheduler.dart`.
 
 ## 17. Local Data Model
 
-Implementation: `lib/data/local/database.dart`, schema version 8.
+Implementation: `lib/data/local/database.dart`, schema version 9.
 
 All local tables use integer IDs where applicable, foreign keys, and UTC timestamps. Foreign keys are explicitly enabled before the database opens.
 
@@ -542,7 +554,8 @@ All local tables use integer IDs where applicable, foreign keys, and UTC timesta
 | `AllergenTags` | Profile-level exclusion terms. | Belongs to a profile. |
 | `DishAllergenTags` | Optional dish/allergen join table. | Composite key of dish and tag. |
 | `GeneratedPlans` | Versioned projected plans. | Belongs to a profile. |
-| `MealSlots` | Day/meal assignments and consumption state. | Belongs to a generated plan and references a dish. |
+| `MealSlots` | Day/meal assignments and consumption state. | Belongs to a generated plan and references a primary dish. |
+| `MealSlotItems` | Optional dish components for each meal slot. | Belongs to a meal slot and references a dish. |
 | `SyncQueue` | Durable outbound changes. | Stores entity, operation, JSON payload, and dirty/synced state. |
 | `BudgetEntries` | Actual spending. | Belongs to a profile; can reference a plan and meal slot. |
 
@@ -556,6 +569,7 @@ Migration history:
 - Version 6: meal-slot link on budget entries.
 - Version 7: planning focus and currency metadata.
 - Version 8: persisted meal-slot macro snapshots and servings.
+- Version 9: persisted meal times and multi-dish meal-slot components.
 
 ## 18. Repository And Write Semantics
 
@@ -655,7 +669,7 @@ Third-party provider secrets are not embedded in the Flutter client.
 
 ## 21. Supabase Database System
 
-The ten migrations in `supabase/migrations` create and evolve:
+The migrations in `supabase/migrations` (see `PROGRESS.md` for applied and pending status) create and evolve:
 
 - `sync_records` for timestamped entity envelopes.
 - User profiles, dishes, ingredients, nutrition cache, allergen tags, generated plans, meal slots, and budget entries.
@@ -670,7 +684,7 @@ The ten migrations in `supabase/migrations` create and evolve:
 - Unique linked budget entry per user and meal slot.
 - Conflict hardening for specialized plan, budget, and meal-consumption RPCs.
 
-The linked project schema lint passes. The newest local conflict-hardening migration requires the linked database password before migration parity and application can be verified.
+The linked project schema lint passes. The latest migrations are applied remotely; migration-list inspection requires the linked database password.
 
 ## 22. Currency System
 
@@ -730,25 +744,25 @@ dart run build_runner build
 Completed; generated outputs were current.
 
 dart format --output=none --set-exit-if-changed lib test
-Passed; 66 files checked and none changed.
+Passed; 71 files checked and none changed.
 
 flutter test --coverage
-Passed; 55 tests passed.
+Passed; 61 tests passed, including the connected service smoke.
 
 flutter build apk --debug
 Passed; build/app/outputs/flutter-apk/app-debug.apk.
 
-flutter build apk --release --build-name=1.0.0 --build-number=2
+flutter build apk --release --build-name=1.0.0 --build-number=4
 Passed compilation; local artifact is debug-signed pending production keystore configuration.
 
-flutter build appbundle --release --build-name=1.0.0 --build-number=2
+flutter build appbundle --release --build-name=1.0.0 --build-number=4
 Passed compilation; local artifact is debug-signed pending production keystore configuration.
 
 powershell -ExecutionPolicy Bypass -File .\build_release.ps1 -Artifact apk
 Correctly refuses to run when production signing variables are missing.
 
 npx supabase migration list --linked
-Requires `SUPABASE_DB_PASSWORD` after the local conflict-hardening migration was added.
+Requires `SUPABASE_DB_PASSWORD` for CLI login inspection after the latest migrations.
 
 npx supabase db lint --linked
 Passed; no schema errors found.
@@ -765,7 +779,7 @@ Added Flutter, Drift, coverage, Android package, Deno, and optional Supabase val
 
 The Android build emits a non-fatal warning because `workmanager_android` still applies the legacy Kotlin Gradle Plugin. The iOS build was not run because iOS builds require macOS and Xcode.
 
-Connected Android smoke validation also passed sign-in, profile setup, manual dish creation, USDA nutrition enrichment, Gemini planning, plan history/detail, serving adjustment, budget expense tracking, notification permission/scheduling, sync action, sign-out/re-login, and photo recognition. No fatal application exception appeared in the emulator log scan.
+Connected Android smoke validation also passed sign-in, profile setup, manual dish creation, USDA nutrition enrichment, Gemini planning, plan history/detail, serving adjustment, budget expense tracking, meal check-in controls, notification permission/scheduling, sync action, sign-out/re-login, and photo recognition. No fatal application exception appeared in the emulator log scan.
 
 ## 26. Known Limitations And Open Verification
 
@@ -778,8 +792,14 @@ Connected Android smoke validation also passed sign-in, profile setup, manual di
 - iOS native build, notification delivery, camera access, and Workmanager execution remain unverified on Windows.
 - Accessibility, text scaling, and planner performance with large dish libraries need dedicated validation.
 - Production release signing is not configured in this environment. The hardened release script refuses missing keystore variables and rejects debug-signed APKs.
-- The newest local migration is not yet verified or applied remotely because the linked database password is unavailable.
-- The client still has outbound sync only; authenticated remote-to-local pull/hydration is open work.
+- The latest migrations were applied with `supabase db push`; migration-list inspection requires the linked database password.
+- Notification delivery and weekly background execution have not been verified; only permission and scheduling setup have.
+- Workmanager still emits a non-fatal legacy Kotlin Gradle Plugin warning on Android builds.
+- Settings schedules future reminders for active-plan meals using configured daily meal times; device delivery still needs verification.
+- One-hour auto-skip reconciliation runs while Plan or Budget is active; it is not performed by the background worker.
+- Release shrinking is disabled for the current artifacts.
+- Privacy text and production environment configuration still need review.
+- Real-account service smoke coverage now exercises authentication, USDA, Gemini planning, plan/component sync, and meal check-in sync. Camera recognition, notification delivery, and long-running background execution still need dedicated device coverage.
 
 ## 27. Source Map
 
@@ -800,3 +820,12 @@ Connected Android smoke validation also passed sign-in, profile setup, manual di
 | Supabase schema and RPC | `supabase/migrations/*.sql` |
 | CI and release automation | `.github/workflows/quality.yml`, `build_release.ps1` |
 | Automated tests | `test/unit`, `test/widget`, `test/integration` |
+
+## 28. Related Documents
+
+- `SPRINT.md`: ordered sprint summary of how the features were built and fit together.
+- `PROGRESS.md`: detailed checklist, verification log, known warnings, and remaining work.
+- `PLAN.md`: architecture, schema, package plan, and original build phases.
+- `README.md`: setup instructions and project limitations.
+
+This document is the authoritative description of what the app contains. If another document differs about app behavior, this one takes precedence.

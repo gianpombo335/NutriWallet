@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
@@ -9,6 +11,8 @@ import '../../core/currency/app_currency.dart';
 import '../../core/providers.dart';
 import '../../data/local/database.dart';
 import '../../data/remote/sync_service.dart';
+import '../meal_planner/meal_check_in.dart';
+import '../meal_planner/domain/meal_schedule.dart';
 
 class BudgetScreen extends ConsumerStatefulWidget {
   const BudgetScreen({super.key});
@@ -197,75 +201,49 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
     UserProfile profile,
     GeneratedPlan plan,
     MealSlot slot,
+    AppCurrency currency, {
+    String? preferredStatus,
+  }) async {
+    await MealCheckInFlow.show(
+      context: context,
+      budgetRepository: ref.read(budgetRepositoryProvider),
+      profile: profile,
+      plan: plan,
+      slot: slot,
+      schedule: MealSchedule.fromJson(
+        profile.mealTimesJson,
+        profile.mealsPerDay,
+      ),
+      currency: currency,
+      preferredStatus: preferredStatus,
+    );
+    if (context.mounted) setState(() {});
+  }
+
+  Future<void> _autoSkipMeals(
+    UserProfile profile,
+    GeneratedPlan plan,
+    List<MealSlot> slots,
     AppCurrency currency,
   ) async {
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      builder: (sheetContext) => SafeArea(
-        child: Wrap(
-          children: [
-            ListTile(
-              leading: const Icon(Icons.check_circle_outline),
-              title: const Text('I ate the planned meal'),
-              onTap: () => Navigator.pop(sheetContext, 'eaten'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.swap_horiz),
-              title: const Text('I ate something else'),
-              onTap: () => Navigator.pop(sheetContext, 'substitute'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.remove_circle_outline),
-              title: const Text('Skip this meal'),
-              onTap: () => Navigator.pop(sheetContext, 'skipped'),
-            ),
-          ],
-        ),
-      ),
+    final schedule = MealSchedule.fromJson(
+      profile.mealTimesJson,
+      profile.mealsPerDay,
     );
-    if (action == null || !context.mounted) return;
-    var status = action;
-    int? actualCost;
-    String? substituteName;
-    final plannedDate = DateTime.utc(
-      plan.weekStartDate.year,
-      plan.weekStartDate.month,
-      plan.weekStartDate.day + slot.dayIndex - 1,
-    );
-    var consumedAt = plannedDate;
-    if (action == 'eaten') {
-      actualCost = slot.plannedCostCents;
-    } else if (action == 'substitute') {
-      final outcome = await showDialog<_MealOutcome>(
+    for (final slot in slots) {
+      final updated = await MealCheckInFlow.show(
         context: context,
-        builder: (_) =>
-            _SubstituteMealDialog(currency: currency, initialDate: plannedDate),
+        budgetRepository: ref.read(budgetRepositoryProvider),
+        profile: profile,
+        plan: plan,
+        slot: slot,
+        schedule: schedule,
+        currency: currency,
+        preferredStatus: 'skipped',
       );
-      if (outcome == null || !context.mounted) return;
-      status = 'substitute';
-      actualCost = (outcome.amount * 100).round();
-      substituteName = outcome.name;
-      consumedAt = outcome.consumedAt;
+      if (!updated) throw StateError('Could not auto-skip a meal.');
     }
-    final checkInLabel = switch (status) {
-      'eaten' =>
-        'Meal eaten as planned · Day ${slot.dayIndex}, meal ${slot.slotIndex + 1}',
-      'substitute' => 'Substitute meal: ${substituteName ?? 'Other meal'}',
-      _ => 'Meal skipped · Day ${slot.dayIndex}, meal ${slot.slotIndex + 1}',
-    };
-    await ref
-        .read(budgetRepositoryProvider)
-        .recordMealCheckIn(
-          profileId: profile.id,
-          planId: plan.id,
-          slotId: slot.id,
-          mealStatus: status,
-          consumedAt: consumedAt,
-          actualCostCents: actualCost,
-          substituteName: substituteName,
-          label: checkInLabel,
-        );
-    if (context.mounted) setState(() {});
+    if (mounted) setState(() {});
   }
 
   @override
@@ -294,7 +272,9 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
           future: ref.read(mealPlanRepositoryProvider).activePlan(profile.id),
           builder: (context, planSnapshot) {
             if (planSnapshot.hasError) {
-              return const Center(child: Text('Could not load the active plan.'));
+              return const Center(
+                child: Text('Could not load the active plan.'),
+              );
             }
             final plan = planSnapshot.data;
             final budget = profile.weeklyBudgetCents;
@@ -535,20 +515,58 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
                         .read(mealPlanRepositoryProvider)
                         .slotsForPlan(plan.id),
                     builder: (context, slotsSnapshot) {
+                      if (slotsSnapshot.hasError) {
+                        return const Card(
+                          child: ListTile(
+                            leading: Icon(Icons.error_outline),
+                            title: Text('Meal timeline unavailable'),
+                            subtitle: Text('Try again shortly.'),
+                          ),
+                        );
+                      }
+                      if (slotsSnapshot.connectionState ==
+                              ConnectionState.waiting &&
+                          !slotsSnapshot.hasData) {
+                        return const Card(
+                          child: Padding(
+                            padding: EdgeInsets.all(18),
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                                SizedBox(width: 12),
+                                Text('Loading meal timeline...'),
+                              ],
+                            ),
+                          ),
+                        );
+                      }
                       final slots = slotsSnapshot.data ?? const <MealSlot>[];
                       if (slots.isEmpty) return const SizedBox.shrink();
                       return _MealCheckInCard(
                         plan: plan,
                         slots: slots,
+                        schedule: MealSchedule.fromJson(
+                          profile.mealTimesJson,
+                          profile.mealsPerDay,
+                        ),
                         currency: currency,
-                        onCheckIn: (slot) => _checkInMeal(
+                        onCheckIn: (slot, {preferredStatus}) => _checkInMeal(
                           context,
                           ref,
                           profile,
                           plan,
                           slot,
                           currency,
+                          preferredStatus: preferredStatus,
                         ),
+                        onAutoSkip: (slots) =>
+                            _autoSkipMeals(profile, plan, slots, currency),
                       );
                     },
                   ),
@@ -631,48 +649,212 @@ class _Legend extends StatelessWidget {
   );
 }
 
-class _MealCheckInCard extends StatelessWidget {
+class _MealCheckInCard extends StatefulWidget {
   const _MealCheckInCard({
     required this.plan,
     required this.slots,
+    required this.schedule,
     required this.currency,
     required this.onCheckIn,
+    required this.onAutoSkip,
   });
 
   final GeneratedPlan plan;
   final List<MealSlot> slots;
+  final MealSchedule schedule;
   final AppCurrency currency;
-  final Future<void> Function(MealSlot slot) onCheckIn;
+  final Future<void> Function(MealSlot slot, {String? preferredStatus})
+  onCheckIn;
+  final Future<void> Function(List<MealSlot> slots) onAutoSkip;
+
+  @override
+  State<_MealCheckInCard> createState() => _MealCheckInCardState();
+}
+
+class _MealCheckInCardState extends State<_MealCheckInCard> {
+  Timer? _timer;
+  bool _autoSkipInFlight = false;
+  final _autoSkipRequested = <int>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) {
+        setState(() {});
+        _maybeAutoSkip();
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeAutoSkip());
+  }
+
+  @override
+  void didUpdateWidget(covariant _MealCheckInCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.plan.id != widget.plan.id) _autoSkipRequested.clear();
+    _maybeAutoSkip();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final scheduled = MealScheduleResolver.resolve(
+      plan: widget.plan,
+      slots: widget.slots,
+      schedule: widget.schedule,
+    );
+    final current = MealScheduleResolver.currentMeal(scheduled);
+    final next = MealScheduleResolver.nextMeal(scheduled);
     return Card(
       margin: const EdgeInsets.only(top: AppSpacing.item),
       child: ExpansionTile(
-        title: const Text('Meal check-in'),
-        subtitle: const Text('Mark what you actually ate and spent'),
-        children: slots
-            .map(
-              (slot) => ListTile(
-                leading: CircleAvatar(child: Text('${slot.dayIndex}')),
-                title: Text(
-                  slot.mealStatus == 'substitute' &&
-                          slot.substituteName?.isNotEmpty == true
-                      ? slot.substituteName!
-                      : 'Planned meal · Meal ${slot.slotIndex + 1}',
-                ),
-                subtitle: Text(
-                  '${_date(plan.weekStartDate.add(Duration(days: slot.dayIndex - 1)))} · ${_status(slot.mealStatus)}',
-                ),
-                trailing: slot.actualCostCents == null
-                    ? const Icon(Icons.more_horiz)
-                    : Text(currency.formatCents(slot.actualCostCents!)),
-                onTap: () => onCheckIn(slot),
+        title: const Text('Meal timeline'),
+        subtitle: Text(
+          next != null
+              ? 'Next: Meal ${next.slot.slotIndex + 1} · ${_time(next.scheduledAt)}'
+              : current == null
+              ? 'All scheduled meals are checked in'
+              : 'Current: Meal ${current.slot.slotIndex + 1} · ${_time(current.scheduledAt)}',
+        ),
+        children: [
+          if (next != null)
+            _highlight(
+              context,
+              label: 'NEXT MEAL',
+              meal: next,
+              color: AppColors.budgetGold,
+            ),
+          if (current != null)
+            _highlight(
+              context,
+              label: 'CURRENT MEAL',
+              meal: current,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ...scheduled.map(
+            (meal) => ListTile(
+              leading: CircleAvatar(child: Text('${meal.slot.dayIndex}')),
+              title: Text(
+                meal.slot.mealStatus == 'substitute' &&
+                        meal.slot.substituteName?.isNotEmpty == true
+                    ? meal.slot.substituteName!
+                    : 'Meal ${meal.slot.slotIndex + 1}',
               ),
-            )
-            .toList(),
+              subtitle: Text(
+                '${_date(meal.scheduledAt)} · ${_time(meal.scheduledAt)} · ${_status(meal.slot.mealStatus)}',
+              ),
+              trailing: meal.slot.actualCostCents == null
+                  ? const Icon(Icons.edit_outlined)
+                  : Text(
+                      widget.currency.formatCents(meal.slot.actualCostCents!),
+                    ),
+              onTap: () => widget.onCheckIn(meal.slot),
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  Widget _highlight(
+    BuildContext context, {
+    required String label,
+    required ScheduledMeal meal,
+    required Color color,
+  }) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 10, 12, 2),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.schedule, color: color),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '$label · Meal ${meal.slot.slotIndex + 1}\n${_date(meal.scheduledAt)} at ${_time(meal.scheduledAt)}',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              FilledButton.tonalIcon(
+                onPressed: _autoSkipInFlight
+                    ? null
+                    : () =>
+                          widget.onCheckIn(meal.slot, preferredStatus: 'eaten'),
+                icon: const Icon(Icons.check, size: 18),
+                label: const Text('Eaten'),
+              ),
+              OutlinedButton.icon(
+                onPressed: _autoSkipInFlight
+                    ? null
+                    : () => widget.onCheckIn(
+                        meal.slot,
+                        preferredStatus: 'substitute',
+                      ),
+                icon: const Icon(Icons.swap_horiz, size: 18),
+                label: const Text('Substitute'),
+              ),
+              TextButton.icon(
+                onPressed: _autoSkipInFlight
+                    ? null
+                    : () => widget.onCheckIn(
+                        meal.slot,
+                        preferredStatus: 'skipped',
+                      ),
+                icon: const Icon(Icons.remove_circle_outline, size: 18),
+                label: const Text('Skip'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _maybeAutoSkip() {
+    if (_autoSkipInFlight || !mounted) return;
+    final scheduled = MealScheduleResolver.resolve(
+      plan: widget.plan,
+      slots: widget.slots,
+      schedule: widget.schedule,
+    );
+    final candidates = MealScheduleResolver.mealsToAutoSkip(scheduled)
+        .where((meal) => !_autoSkipRequested.contains(meal.slot.id))
+        .map((meal) => meal.slot)
+        .toList();
+    if (candidates.isEmpty) return;
+    _autoSkipRequested.addAll(candidates.map((slot) => slot.id));
+    _autoSkipInFlight = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      try {
+        await widget.onAutoSkip(candidates);
+      } catch (_) {
+        _autoSkipRequested.removeAll(candidates.map((slot) => slot.id));
+      } finally {
+        _autoSkipInFlight = false;
+        if (mounted) setState(() {});
+      }
+    });
   }
 
   String _status(String status) => switch (status) {
@@ -683,128 +865,11 @@ class _MealCheckInCard extends StatelessWidget {
   };
 
   String _date(DateTime value) => '${value.month}/${value.day}/${value.year}';
-}
 
-class _MealOutcome {
-  const _MealOutcome({
-    required this.name,
-    required this.amount,
-    required this.consumedAt,
-  });
-
-  final String name;
-  final double amount;
-  final DateTime consumedAt;
-}
-
-class _SubstituteMealDialog extends StatefulWidget {
-  const _SubstituteMealDialog({
-    required this.currency,
-    required this.initialDate,
-  });
-
-  final AppCurrency currency;
-  final DateTime initialDate;
-
-  @override
-  State<_SubstituteMealDialog> createState() => _SubstituteMealDialogState();
-}
-
-class _SubstituteMealDialogState extends State<_SubstituteMealDialog> {
-  final _nameController = TextEditingController();
-  final _amountController = TextEditingController();
-  late DateTime _consumedAt;
-
-  @override
-  void initState() {
-    super.initState();
-    _consumedAt = widget.initialDate;
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _amountController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _pickDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-      initialDate: _consumedAt,
-    );
-    if (picked != null) setState(() => _consumedAt = picked);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Record a substitute meal'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _nameController,
-              autofocus: true,
-              decoration: const InputDecoration(labelText: 'What did you eat?'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _amountController,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: InputDecoration(
-                labelText: 'Amount spent',
-                prefixText: '${widget.currency.symbol} ',
-              ),
-            ),
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: _pickDate,
-                icon: const Icon(Icons.calendar_today_outlined),
-                label: Text(
-                  'Date: ${_consumedAt.month}/${_consumedAt.day}/${_consumedAt.year}',
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () {
-            final name = _nameController.text.trim();
-            final amount = double.tryParse(_amountController.text.trim());
-            if (name.isEmpty ||
-                amount == null ||
-                !amount.isFinite ||
-                amount <= 0 ||
-                amount > 10000000) {
-              return;
-            }
-            Navigator.pop(
-              context,
-              _MealOutcome(
-                name: name,
-                amount: amount,
-                consumedAt: _consumedAt.toUtc(),
-              ),
-            );
-          },
-          child: const Text('Save meal'),
-        ),
-      ],
-    );
+  String _time(DateTime value) {
+    final suffix = value.hour >= 12 ? 'PM' : 'AM';
+    final hour = value.hour % 12 == 0 ? 12 : value.hour % 12;
+    return '$hour:${value.minute.toString().padLeft(2, '0')} $suffix';
   }
 }
 

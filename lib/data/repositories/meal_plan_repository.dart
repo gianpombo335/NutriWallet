@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../../features/meal_planner/domain/planner_models.dart';
+import '../../features/nutrition_goal/domain/nutrition_models.dart';
 import '../local/daos/dish_dao.dart';
 import '../local/database.dart';
 import '../remote/sync_service.dart';
@@ -104,10 +105,29 @@ class MealPlanRepository {
             'planned_carbs_g': assignment.nutrition.carbsG,
             'planned_fat_g': assignment.nutrition.fatG,
             'servings': assignment.servings,
+            'components': _componentsPayload(assignment.mealComponents),
             'meal_status': 'planned',
           },
           dirtyAt: now,
         );
+        for (var index = 0; index < assignment.mealComponents.length; index++) {
+          final component = assignment.mealComponents[index];
+          await _database
+              .into(_database.mealSlotItems)
+              .insert(
+                MealSlotItemsCompanion.insert(
+                  mealSlotId: slotId,
+                  dishId: component.dish.id,
+                  plannedCostCents: component.plannedCostCents,
+                  plannedCalories: Value(component.nutrition.calories),
+                  plannedProteinG: Value(component.nutrition.proteinG),
+                  plannedCarbsG: Value(component.nutrition.carbsG),
+                  plannedFatG: Value(component.nutrition.fatG),
+                  servings: Value(component.servings),
+                  sortOrder: Value(index),
+                ),
+              );
+        }
       }
       return (_database.select(
         _database.generatedPlans,
@@ -196,6 +216,15 @@ class MealPlanRepository {
             ]))
           .get();
 
+  Stream<List<MealSlot>> watchSlotsForPlan(int planId) =>
+      (_database.select(_database.mealSlots)
+            ..where((row) => row.generatedPlanId.equals(planId))
+            ..orderBy([
+              (row) => OrderingTerm.asc(row.dayIndex),
+              (row) => OrderingTerm.asc(row.slotIndex),
+            ]))
+          .watch();
+
   Future<void> updateMealSlotPlan({
     required int profileId,
     required int planId,
@@ -203,14 +232,33 @@ class MealPlanRepository {
     required int slotIndex,
     required PlannerDish dish,
     required double servings,
+  }) => updateMealSlotComponents(
+    profileId: profileId,
+    planId: planId,
+    dayIndex: dayIndex,
+    slotIndex: slotIndex,
+    components: [MealSlotComponent(dish: dish, servings: servings)],
+  );
+
+  Future<void> updateMealSlotComponents({
+    required int profileId,
+    required int planId,
+    required int dayIndex,
+    required int slotIndex,
+    required List<MealSlotComponent> components,
   }) async {
-    if (!servings.isFinite || servings < 0.5) {
-      throw ArgumentError.value(servings, 'servings');
+    if (components.isEmpty) throw ArgumentError('A meal needs a dish.');
+    for (final component in components) {
+      if (!component.servings.isFinite || component.servings < 0.5) {
+        throw ArgumentError.value(component.servings, 'servings');
+      }
     }
     final plan = await findByIdForProfile(planId, profileId);
     if (plan == null) return;
-    final savedDish = await DishDao(_database).findById(dish.id);
-    if (savedDish == null || savedDish.userProfileId != profileId) return;
+    for (final component in components) {
+      final savedDish = await DishDao(_database).findById(component.dish.id);
+      if (savedDish == null || savedDish.userProfileId != profileId) return;
+    }
     final slot =
         await (_database.select(_database.mealSlots)..where(
               (row) =>
@@ -221,23 +269,56 @@ class MealPlanRepository {
             .getSingleOrNull();
     if (slot == null) return;
 
-    final scaledNutrition = dish.nutrition * servings;
-    final plannedCostCents = (dish.roundedPriceCents * servings).round();
+    final plannedCostCents = components.fold<int>(
+      0,
+      (sum, component) => sum + component.plannedCostCents,
+    );
+    final nutrition = components.fold(
+      const NutritionTargets(calories: 0, proteinG: 0, carbsG: 0, fatG: 0),
+      (total, component) => NutritionTargets(
+        calories: total.calories + component.nutrition.calories,
+        proteinG: total.proteinG + component.nutrition.proteinG,
+        carbsG: total.carbsG + component.nutrition.carbsG,
+        fatG: total.fatG + component.nutrition.fatG,
+      ),
+    );
+    final primary = components.first;
     final changedAt = DateTime.now().toUtc();
     await _database.transaction(() async {
       await (_database.update(
         _database.mealSlots,
       )..where((row) => row.id.equals(slot.id))).write(
         MealSlotsCompanion(
-          dishId: Value(dish.id),
+          dishId: Value(primary.dish.id),
           plannedCostCents: Value(plannedCostCents),
-          plannedCalories: Value(scaledNutrition.calories),
-          plannedProteinG: Value(scaledNutrition.proteinG),
-          plannedCarbsG: Value(scaledNutrition.carbsG),
-          plannedFatG: Value(scaledNutrition.fatG),
-          servings: Value(servings),
+          plannedCalories: Value(nutrition.calories),
+          plannedProteinG: Value(nutrition.proteinG),
+          plannedCarbsG: Value(nutrition.carbsG),
+          plannedFatG: Value(nutrition.fatG),
+          servings: Value(primary.servings),
         ),
       );
+      await (_database.delete(
+        _database.mealSlotItems,
+      )..where((row) => row.mealSlotId.equals(slot.id))).go();
+      for (var index = 0; index < components.length; index++) {
+        final component = components[index];
+        await _database
+            .into(_database.mealSlotItems)
+            .insert(
+              MealSlotItemsCompanion.insert(
+                mealSlotId: slot.id,
+                dishId: component.dish.id,
+                plannedCostCents: component.plannedCostCents,
+                plannedCalories: Value(component.nutrition.calories),
+                plannedProteinG: Value(component.nutrition.proteinG),
+                plannedCarbsG: Value(component.nutrition.carbsG),
+                plannedFatG: Value(component.nutrition.fatG),
+                servings: Value(component.servings),
+                sortOrder: Value(index),
+              ),
+            );
+      }
 
       final updatedSlots = await slotsForPlan(planId);
       final totalCostCents = updatedSlots.fold<int>(
@@ -267,17 +348,21 @@ class MealPlanRepository {
         payload: {
           'profile_id': profileId,
           'generated_plan_id': planId,
-          'dish_id': dish.id,
+          'dish_id': primary.dish.id,
           'day_index': slot.dayIndex,
           'slot_index': slot.slotIndex,
           'planned_cost_cents': plannedCostCents,
-          'planned_calories': scaledNutrition.calories,
-          'planned_protein_g': scaledNutrition.proteinG,
-          'planned_carbs_g': scaledNutrition.carbsG,
-          'planned_fat_g': scaledNutrition.fatG,
-          'servings': servings,
+          'planned_calories': nutrition.calories,
+          'planned_protein_g': nutrition.proteinG,
+          'planned_carbs_g': nutrition.carbsG,
+          'planned_fat_g': nutrition.fatG,
+          'servings': primary.servings,
+          'components': _componentsPayload(components),
           'plan_edit': true,
           'meal_status': slot.mealStatus,
+          'actual_cost_cents': slot.actualCostCents,
+          'substitute_name': slot.substituteName,
+          'consumed_at': slot.consumedAt?.toUtc().toIso8601String(),
         },
         dirtyAt: changedAt,
       );
@@ -366,28 +451,59 @@ class MealPlanRepository {
     final slots = await slotsForPlan(plan.id);
     final assignments = <MealSlotAssignment>[];
     for (final slot in slots) {
-      final dish = await dishDao.findById(slot.dishId);
-      if (dish == null) continue;
-      final ingredients = await dishDao.ingredientsForDish(dish.id);
-      final servings = slot.servings <= 0 ? 1.0 : slot.servings;
+      final itemRows =
+          await (_database.select(_database.mealSlotItems)
+                ..where((row) => row.mealSlotId.equals(slot.id))
+                ..orderBy([(row) => OrderingTerm.asc(row.sortOrder)]))
+              .get();
+      final components = <MealSlotComponent>[];
+      final sourceRows = itemRows.isEmpty
+          ? [
+              MealSlotItem(
+                id: 0,
+                mealSlotId: slot.id,
+                dishId: slot.dishId,
+                plannedCostCents: slot.plannedCostCents,
+                plannedCalories: slot.plannedCalories,
+                plannedProteinG: slot.plannedProteinG,
+                plannedCarbsG: slot.plannedCarbsG,
+                plannedFatG: slot.plannedFatG,
+                servings: slot.servings,
+                sortOrder: 0,
+              ),
+            ]
+          : itemRows;
+      for (final item in sourceRows) {
+        final dish = await dishDao.findById(item.dishId);
+        if (dish == null) continue;
+        final ingredients = await dishDao.ingredientsForDish(dish.id);
+        final servings = item.servings <= 0 ? 1.0 : item.servings;
+        components.add(
+          MealSlotComponent(
+            dish: PlannerDish(
+              id: dish.id,
+              name: dish.name,
+              price: item.plannedCostCents / servings / 100,
+              calories: item.plannedCalories / servings,
+              proteinG: item.plannedProteinG / servings,
+              carbsG: item.plannedCarbsG / servings,
+              fatG: item.plannedFatG / servings,
+              ingredients: ingredients.map((item) => item.name).toList(),
+            ),
+            servings: servings,
+          ),
+        );
+      }
+      if (components.isEmpty) continue;
+      final primary = components.first;
       assignments.add(
         MealSlotAssignment(
           dayIndex: slot.dayIndex,
           slotIndex: slot.slotIndex,
-          dish: PlannerDish(
-            id: dish.id,
-            name: dish.name,
-            // Saved slots are snapshots. A later dish edit should not silently
-            // rewrite the historical plan's nutrition or projected cost.
-            price: slot.plannedCostCents / servings / 100,
-            calories: slot.plannedCalories / servings,
-            proteinG: slot.plannedProteinG / servings,
-            carbsG: slot.plannedCarbsG / servings,
-            fatG: slot.plannedFatG / servings,
-            ingredients: ingredients.map((item) => item.name).toList(),
-          ),
+          dish: primary.dish,
           reason: 'saved active plan',
-          servings: servings,
+          servings: primary.servings,
+          components: components,
         ),
       );
     }
@@ -415,4 +531,20 @@ class MealPlanRepository {
     'planning_focus': plan.planningFocus,
     'currency_code': plan.currencyCode,
   };
+
+  List<Map<String, dynamic>> _componentsPayload(
+    Iterable<MealSlotComponent> components,
+  ) => components
+      .map(
+        (component) => {
+          'dish_id': component.dish.id,
+          'planned_cost_cents': component.plannedCostCents,
+          'planned_calories': component.nutrition.calories,
+          'planned_protein_g': component.nutrition.proteinG,
+          'planned_carbs_g': component.nutrition.carbsG,
+          'planned_fat_g': component.nutrition.fatG,
+          'servings': component.servings,
+        },
+      )
+      .toList();
 }

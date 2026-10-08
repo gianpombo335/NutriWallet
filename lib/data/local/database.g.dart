@@ -78,6 +78,18 @@ class $UserProfilesTable extends UserProfiles
     requiredDuringInsert: false,
     defaultValue: const Constant(3),
   );
+  static const VerificationMeta _mealTimesJsonMeta = const VerificationMeta(
+    'mealTimesJson',
+  );
+  @override
+  late final GeneratedColumn<String> mealTimesJson = GeneratedColumn<String>(
+    'meal_times_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[480,780,1140]'),
+  );
   static const VerificationMeta _weightKgMeta = const VerificationMeta(
     'weightKg',
   );
@@ -172,6 +184,7 @@ class $UserProfilesTable extends UserProfiles
     weeklyBudgetCents,
     activeDays,
     mealsPerDay,
+    mealTimesJson,
     weightKg,
     heightCm,
     age,
@@ -234,6 +247,15 @@ class $UserProfilesTable extends UserProfiles
         mealsPerDay.isAcceptableOrUnknown(
           data['meals_per_day']!,
           _mealsPerDayMeta,
+        ),
+      );
+    }
+    if (data.containsKey('meal_times_json')) {
+      context.handle(
+        _mealTimesJsonMeta,
+        mealTimesJson.isAcceptableOrUnknown(
+          data['meal_times_json']!,
+          _mealTimesJsonMeta,
         ),
       );
     }
@@ -325,6 +347,10 @@ class $UserProfilesTable extends UserProfiles
         DriftSqlType.int,
         data['${effectivePrefix}meals_per_day'],
       )!,
+      mealTimesJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}meal_times_json'],
+      )!,
       weightKg: attachedDatabase.typeMapping.read(
         DriftSqlType.double,
         data['${effectivePrefix}weight_kg'],
@@ -373,6 +399,7 @@ class UserProfile extends DataClass implements Insertable<UserProfile> {
   final int weeklyBudgetCents;
   final String activeDays;
   final int mealsPerDay;
+  final String mealTimesJson;
   final double? weightKg;
   final double? heightCm;
   final int? age;
@@ -388,6 +415,7 @@ class UserProfile extends DataClass implements Insertable<UserProfile> {
     required this.weeklyBudgetCents,
     required this.activeDays,
     required this.mealsPerDay,
+    required this.mealTimesJson,
     this.weightKg,
     this.heightCm,
     this.age,
@@ -408,6 +436,7 @@ class UserProfile extends DataClass implements Insertable<UserProfile> {
     map['weekly_budget_cents'] = Variable<int>(weeklyBudgetCents);
     map['active_days'] = Variable<String>(activeDays);
     map['meals_per_day'] = Variable<int>(mealsPerDay);
+    map['meal_times_json'] = Variable<String>(mealTimesJson);
     if (!nullToAbsent || weightKg != null) {
       map['weight_kg'] = Variable<double>(weightKg);
     }
@@ -437,6 +466,7 @@ class UserProfile extends DataClass implements Insertable<UserProfile> {
       weeklyBudgetCents: Value(weeklyBudgetCents),
       activeDays: Value(activeDays),
       mealsPerDay: Value(mealsPerDay),
+      mealTimesJson: Value(mealTimesJson),
       weightKg: weightKg == null && nullToAbsent
           ? const Value.absent()
           : Value(weightKg),
@@ -464,6 +494,7 @@ class UserProfile extends DataClass implements Insertable<UserProfile> {
       weeklyBudgetCents: serializer.fromJson<int>(json['weeklyBudgetCents']),
       activeDays: serializer.fromJson<String>(json['activeDays']),
       mealsPerDay: serializer.fromJson<int>(json['mealsPerDay']),
+      mealTimesJson: serializer.fromJson<String>(json['mealTimesJson']),
       weightKg: serializer.fromJson<double?>(json['weightKg']),
       heightCm: serializer.fromJson<double?>(json['heightCm']),
       age: serializer.fromJson<int?>(json['age']),
@@ -484,6 +515,7 @@ class UserProfile extends DataClass implements Insertable<UserProfile> {
       'weeklyBudgetCents': serializer.toJson<int>(weeklyBudgetCents),
       'activeDays': serializer.toJson<String>(activeDays),
       'mealsPerDay': serializer.toJson<int>(mealsPerDay),
+      'mealTimesJson': serializer.toJson<String>(mealTimesJson),
       'weightKg': serializer.toJson<double?>(weightKg),
       'heightCm': serializer.toJson<double?>(heightCm),
       'age': serializer.toJson<int?>(age),
@@ -502,6 +534,7 @@ class UserProfile extends DataClass implements Insertable<UserProfile> {
     int? weeklyBudgetCents,
     String? activeDays,
     int? mealsPerDay,
+    String? mealTimesJson,
     Value<double?> weightKg = const Value.absent(),
     Value<double?> heightCm = const Value.absent(),
     Value<int?> age = const Value.absent(),
@@ -517,6 +550,7 @@ class UserProfile extends DataClass implements Insertable<UserProfile> {
     weeklyBudgetCents: weeklyBudgetCents ?? this.weeklyBudgetCents,
     activeDays: activeDays ?? this.activeDays,
     mealsPerDay: mealsPerDay ?? this.mealsPerDay,
+    mealTimesJson: mealTimesJson ?? this.mealTimesJson,
     weightKg: weightKg.present ? weightKg.value : this.weightKg,
     heightCm: heightCm.present ? heightCm.value : this.heightCm,
     age: age.present ? age.value : this.age,
@@ -542,6 +576,9 @@ class UserProfile extends DataClass implements Insertable<UserProfile> {
       mealsPerDay: data.mealsPerDay.present
           ? data.mealsPerDay.value
           : this.mealsPerDay,
+      mealTimesJson: data.mealTimesJson.present
+          ? data.mealTimesJson.value
+          : this.mealTimesJson,
       weightKg: data.weightKg.present ? data.weightKg.value : this.weightKg,
       heightCm: data.heightCm.present ? data.heightCm.value : this.heightCm,
       age: data.age.present ? data.age.value : this.age,
@@ -566,6 +603,7 @@ class UserProfile extends DataClass implements Insertable<UserProfile> {
           ..write('weeklyBudgetCents: $weeklyBudgetCents, ')
           ..write('activeDays: $activeDays, ')
           ..write('mealsPerDay: $mealsPerDay, ')
+          ..write('mealTimesJson: $mealTimesJson, ')
           ..write('weightKg: $weightKg, ')
           ..write('heightCm: $heightCm, ')
           ..write('age: $age, ')
@@ -586,6 +624,7 @@ class UserProfile extends DataClass implements Insertable<UserProfile> {
     weeklyBudgetCents,
     activeDays,
     mealsPerDay,
+    mealTimesJson,
     weightKg,
     heightCm,
     age,
@@ -605,6 +644,7 @@ class UserProfile extends DataClass implements Insertable<UserProfile> {
           other.weeklyBudgetCents == this.weeklyBudgetCents &&
           other.activeDays == this.activeDays &&
           other.mealsPerDay == this.mealsPerDay &&
+          other.mealTimesJson == this.mealTimesJson &&
           other.weightKg == this.weightKg &&
           other.heightCm == this.heightCm &&
           other.age == this.age &&
@@ -622,6 +662,7 @@ class UserProfilesCompanion extends UpdateCompanion<UserProfile> {
   final Value<int> weeklyBudgetCents;
   final Value<String> activeDays;
   final Value<int> mealsPerDay;
+  final Value<String> mealTimesJson;
   final Value<double?> weightKg;
   final Value<double?> heightCm;
   final Value<int?> age;
@@ -637,6 +678,7 @@ class UserProfilesCompanion extends UpdateCompanion<UserProfile> {
     this.weeklyBudgetCents = const Value.absent(),
     this.activeDays = const Value.absent(),
     this.mealsPerDay = const Value.absent(),
+    this.mealTimesJson = const Value.absent(),
     this.weightKg = const Value.absent(),
     this.heightCm = const Value.absent(),
     this.age = const Value.absent(),
@@ -653,6 +695,7 @@ class UserProfilesCompanion extends UpdateCompanion<UserProfile> {
     this.weeklyBudgetCents = const Value.absent(),
     this.activeDays = const Value.absent(),
     this.mealsPerDay = const Value.absent(),
+    this.mealTimesJson = const Value.absent(),
     this.weightKg = const Value.absent(),
     this.heightCm = const Value.absent(),
     this.age = const Value.absent(),
@@ -671,6 +714,7 @@ class UserProfilesCompanion extends UpdateCompanion<UserProfile> {
     Expression<int>? weeklyBudgetCents,
     Expression<String>? activeDays,
     Expression<int>? mealsPerDay,
+    Expression<String>? mealTimesJson,
     Expression<double>? weightKg,
     Expression<double>? heightCm,
     Expression<int>? age,
@@ -687,6 +731,7 @@ class UserProfilesCompanion extends UpdateCompanion<UserProfile> {
       if (weeklyBudgetCents != null) 'weekly_budget_cents': weeklyBudgetCents,
       if (activeDays != null) 'active_days': activeDays,
       if (mealsPerDay != null) 'meals_per_day': mealsPerDay,
+      if (mealTimesJson != null) 'meal_times_json': mealTimesJson,
       if (weightKg != null) 'weight_kg': weightKg,
       if (heightCm != null) 'height_cm': heightCm,
       if (age != null) 'age': age,
@@ -705,6 +750,7 @@ class UserProfilesCompanion extends UpdateCompanion<UserProfile> {
     Value<int>? weeklyBudgetCents,
     Value<String>? activeDays,
     Value<int>? mealsPerDay,
+    Value<String>? mealTimesJson,
     Value<double?>? weightKg,
     Value<double?>? heightCm,
     Value<int?>? age,
@@ -721,6 +767,7 @@ class UserProfilesCompanion extends UpdateCompanion<UserProfile> {
       weeklyBudgetCents: weeklyBudgetCents ?? this.weeklyBudgetCents,
       activeDays: activeDays ?? this.activeDays,
       mealsPerDay: mealsPerDay ?? this.mealsPerDay,
+      mealTimesJson: mealTimesJson ?? this.mealTimesJson,
       weightKg: weightKg ?? this.weightKg,
       heightCm: heightCm ?? this.heightCm,
       age: age ?? this.age,
@@ -752,6 +799,9 @@ class UserProfilesCompanion extends UpdateCompanion<UserProfile> {
     }
     if (mealsPerDay.present) {
       map['meals_per_day'] = Variable<int>(mealsPerDay.value);
+    }
+    if (mealTimesJson.present) {
+      map['meal_times_json'] = Variable<String>(mealTimesJson.value);
     }
     if (weightKg.present) {
       map['weight_kg'] = Variable<double>(weightKg.value);
@@ -789,6 +839,7 @@ class UserProfilesCompanion extends UpdateCompanion<UserProfile> {
           ..write('weeklyBudgetCents: $weeklyBudgetCents, ')
           ..write('activeDays: $activeDays, ')
           ..write('mealsPerDay: $mealsPerDay, ')
+          ..write('mealTimesJson: $mealTimesJson, ')
           ..write('weightKg: $weightKg, ')
           ..write('heightCm: $heightCm, ')
           ..write('age: $age, ')
@@ -4566,6 +4617,626 @@ class MealSlotsCompanion extends UpdateCompanion<MealSlot> {
   }
 }
 
+class $MealSlotItemsTable extends MealSlotItems
+    with TableInfo<$MealSlotItemsTable, MealSlotItem> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MealSlotItemsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _mealSlotIdMeta = const VerificationMeta(
+    'mealSlotId',
+  );
+  @override
+  late final GeneratedColumn<int> mealSlotId = GeneratedColumn<int>(
+    'meal_slot_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES meal_slots (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _dishIdMeta = const VerificationMeta('dishId');
+  @override
+  late final GeneratedColumn<int> dishId = GeneratedColumn<int>(
+    'dish_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES dishes (id)',
+    ),
+  );
+  static const VerificationMeta _plannedCostCentsMeta = const VerificationMeta(
+    'plannedCostCents',
+  );
+  @override
+  late final GeneratedColumn<int> plannedCostCents = GeneratedColumn<int>(
+    'planned_cost_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _plannedCaloriesMeta = const VerificationMeta(
+    'plannedCalories',
+  );
+  @override
+  late final GeneratedColumn<double> plannedCalories = GeneratedColumn<double>(
+    'planned_calories',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _plannedProteinGMeta = const VerificationMeta(
+    'plannedProteinG',
+  );
+  @override
+  late final GeneratedColumn<double> plannedProteinG = GeneratedColumn<double>(
+    'planned_protein_g',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _plannedCarbsGMeta = const VerificationMeta(
+    'plannedCarbsG',
+  );
+  @override
+  late final GeneratedColumn<double> plannedCarbsG = GeneratedColumn<double>(
+    'planned_carbs_g',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _plannedFatGMeta = const VerificationMeta(
+    'plannedFatG',
+  );
+  @override
+  late final GeneratedColumn<double> plannedFatG = GeneratedColumn<double>(
+    'planned_fat_g',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _servingsMeta = const VerificationMeta(
+    'servings',
+  );
+  @override
+  late final GeneratedColumn<double> servings = GeneratedColumn<double>(
+    'servings',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    mealSlotId,
+    dishId,
+    plannedCostCents,
+    plannedCalories,
+    plannedProteinG,
+    plannedCarbsG,
+    plannedFatG,
+    servings,
+    sortOrder,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'meal_slot_items';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<MealSlotItem> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('meal_slot_id')) {
+      context.handle(
+        _mealSlotIdMeta,
+        mealSlotId.isAcceptableOrUnknown(
+          data['meal_slot_id']!,
+          _mealSlotIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_mealSlotIdMeta);
+    }
+    if (data.containsKey('dish_id')) {
+      context.handle(
+        _dishIdMeta,
+        dishId.isAcceptableOrUnknown(data['dish_id']!, _dishIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dishIdMeta);
+    }
+    if (data.containsKey('planned_cost_cents')) {
+      context.handle(
+        _plannedCostCentsMeta,
+        plannedCostCents.isAcceptableOrUnknown(
+          data['planned_cost_cents']!,
+          _plannedCostCentsMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_plannedCostCentsMeta);
+    }
+    if (data.containsKey('planned_calories')) {
+      context.handle(
+        _plannedCaloriesMeta,
+        plannedCalories.isAcceptableOrUnknown(
+          data['planned_calories']!,
+          _plannedCaloriesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('planned_protein_g')) {
+      context.handle(
+        _plannedProteinGMeta,
+        plannedProteinG.isAcceptableOrUnknown(
+          data['planned_protein_g']!,
+          _plannedProteinGMeta,
+        ),
+      );
+    }
+    if (data.containsKey('planned_carbs_g')) {
+      context.handle(
+        _plannedCarbsGMeta,
+        plannedCarbsG.isAcceptableOrUnknown(
+          data['planned_carbs_g']!,
+          _plannedCarbsGMeta,
+        ),
+      );
+    }
+    if (data.containsKey('planned_fat_g')) {
+      context.handle(
+        _plannedFatGMeta,
+        plannedFatG.isAcceptableOrUnknown(
+          data['planned_fat_g']!,
+          _plannedFatGMeta,
+        ),
+      );
+    }
+    if (data.containsKey('servings')) {
+      context.handle(
+        _servingsMeta,
+        servings.isAcceptableOrUnknown(data['servings']!, _servingsMeta),
+      );
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  MealSlotItem map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return MealSlotItem(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      mealSlotId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}meal_slot_id'],
+      )!,
+      dishId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}dish_id'],
+      )!,
+      plannedCostCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}planned_cost_cents'],
+      )!,
+      plannedCalories: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}planned_calories'],
+      )!,
+      plannedProteinG: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}planned_protein_g'],
+      )!,
+      plannedCarbsG: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}planned_carbs_g'],
+      )!,
+      plannedFatG: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}planned_fat_g'],
+      )!,
+      servings: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}servings'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+    );
+  }
+
+  @override
+  $MealSlotItemsTable createAlias(String alias) {
+    return $MealSlotItemsTable(attachedDatabase, alias);
+  }
+}
+
+class MealSlotItem extends DataClass implements Insertable<MealSlotItem> {
+  final int id;
+  final int mealSlotId;
+  final int dishId;
+  final int plannedCostCents;
+  final double plannedCalories;
+  final double plannedProteinG;
+  final double plannedCarbsG;
+  final double plannedFatG;
+  final double servings;
+  final int sortOrder;
+  const MealSlotItem({
+    required this.id,
+    required this.mealSlotId,
+    required this.dishId,
+    required this.plannedCostCents,
+    required this.plannedCalories,
+    required this.plannedProteinG,
+    required this.plannedCarbsG,
+    required this.plannedFatG,
+    required this.servings,
+    required this.sortOrder,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['meal_slot_id'] = Variable<int>(mealSlotId);
+    map['dish_id'] = Variable<int>(dishId);
+    map['planned_cost_cents'] = Variable<int>(plannedCostCents);
+    map['planned_calories'] = Variable<double>(plannedCalories);
+    map['planned_protein_g'] = Variable<double>(plannedProteinG);
+    map['planned_carbs_g'] = Variable<double>(plannedCarbsG);
+    map['planned_fat_g'] = Variable<double>(plannedFatG);
+    map['servings'] = Variable<double>(servings);
+    map['sort_order'] = Variable<int>(sortOrder);
+    return map;
+  }
+
+  MealSlotItemsCompanion toCompanion(bool nullToAbsent) {
+    return MealSlotItemsCompanion(
+      id: Value(id),
+      mealSlotId: Value(mealSlotId),
+      dishId: Value(dishId),
+      plannedCostCents: Value(plannedCostCents),
+      plannedCalories: Value(plannedCalories),
+      plannedProteinG: Value(plannedProteinG),
+      plannedCarbsG: Value(plannedCarbsG),
+      plannedFatG: Value(plannedFatG),
+      servings: Value(servings),
+      sortOrder: Value(sortOrder),
+    );
+  }
+
+  factory MealSlotItem.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return MealSlotItem(
+      id: serializer.fromJson<int>(json['id']),
+      mealSlotId: serializer.fromJson<int>(json['mealSlotId']),
+      dishId: serializer.fromJson<int>(json['dishId']),
+      plannedCostCents: serializer.fromJson<int>(json['plannedCostCents']),
+      plannedCalories: serializer.fromJson<double>(json['plannedCalories']),
+      plannedProteinG: serializer.fromJson<double>(json['plannedProteinG']),
+      plannedCarbsG: serializer.fromJson<double>(json['plannedCarbsG']),
+      plannedFatG: serializer.fromJson<double>(json['plannedFatG']),
+      servings: serializer.fromJson<double>(json['servings']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'mealSlotId': serializer.toJson<int>(mealSlotId),
+      'dishId': serializer.toJson<int>(dishId),
+      'plannedCostCents': serializer.toJson<int>(plannedCostCents),
+      'plannedCalories': serializer.toJson<double>(plannedCalories),
+      'plannedProteinG': serializer.toJson<double>(plannedProteinG),
+      'plannedCarbsG': serializer.toJson<double>(plannedCarbsG),
+      'plannedFatG': serializer.toJson<double>(plannedFatG),
+      'servings': serializer.toJson<double>(servings),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+    };
+  }
+
+  MealSlotItem copyWith({
+    int? id,
+    int? mealSlotId,
+    int? dishId,
+    int? plannedCostCents,
+    double? plannedCalories,
+    double? plannedProteinG,
+    double? plannedCarbsG,
+    double? plannedFatG,
+    double? servings,
+    int? sortOrder,
+  }) => MealSlotItem(
+    id: id ?? this.id,
+    mealSlotId: mealSlotId ?? this.mealSlotId,
+    dishId: dishId ?? this.dishId,
+    plannedCostCents: plannedCostCents ?? this.plannedCostCents,
+    plannedCalories: plannedCalories ?? this.plannedCalories,
+    plannedProteinG: plannedProteinG ?? this.plannedProteinG,
+    plannedCarbsG: plannedCarbsG ?? this.plannedCarbsG,
+    plannedFatG: plannedFatG ?? this.plannedFatG,
+    servings: servings ?? this.servings,
+    sortOrder: sortOrder ?? this.sortOrder,
+  );
+  MealSlotItem copyWithCompanion(MealSlotItemsCompanion data) {
+    return MealSlotItem(
+      id: data.id.present ? data.id.value : this.id,
+      mealSlotId: data.mealSlotId.present
+          ? data.mealSlotId.value
+          : this.mealSlotId,
+      dishId: data.dishId.present ? data.dishId.value : this.dishId,
+      plannedCostCents: data.plannedCostCents.present
+          ? data.plannedCostCents.value
+          : this.plannedCostCents,
+      plannedCalories: data.plannedCalories.present
+          ? data.plannedCalories.value
+          : this.plannedCalories,
+      plannedProteinG: data.plannedProteinG.present
+          ? data.plannedProteinG.value
+          : this.plannedProteinG,
+      plannedCarbsG: data.plannedCarbsG.present
+          ? data.plannedCarbsG.value
+          : this.plannedCarbsG,
+      plannedFatG: data.plannedFatG.present
+          ? data.plannedFatG.value
+          : this.plannedFatG,
+      servings: data.servings.present ? data.servings.value : this.servings,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MealSlotItem(')
+          ..write('id: $id, ')
+          ..write('mealSlotId: $mealSlotId, ')
+          ..write('dishId: $dishId, ')
+          ..write('plannedCostCents: $plannedCostCents, ')
+          ..write('plannedCalories: $plannedCalories, ')
+          ..write('plannedProteinG: $plannedProteinG, ')
+          ..write('plannedCarbsG: $plannedCarbsG, ')
+          ..write('plannedFatG: $plannedFatG, ')
+          ..write('servings: $servings, ')
+          ..write('sortOrder: $sortOrder')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    mealSlotId,
+    dishId,
+    plannedCostCents,
+    plannedCalories,
+    plannedProteinG,
+    plannedCarbsG,
+    plannedFatG,
+    servings,
+    sortOrder,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is MealSlotItem &&
+          other.id == this.id &&
+          other.mealSlotId == this.mealSlotId &&
+          other.dishId == this.dishId &&
+          other.plannedCostCents == this.plannedCostCents &&
+          other.plannedCalories == this.plannedCalories &&
+          other.plannedProteinG == this.plannedProteinG &&
+          other.plannedCarbsG == this.plannedCarbsG &&
+          other.plannedFatG == this.plannedFatG &&
+          other.servings == this.servings &&
+          other.sortOrder == this.sortOrder);
+}
+
+class MealSlotItemsCompanion extends UpdateCompanion<MealSlotItem> {
+  final Value<int> id;
+  final Value<int> mealSlotId;
+  final Value<int> dishId;
+  final Value<int> plannedCostCents;
+  final Value<double> plannedCalories;
+  final Value<double> plannedProteinG;
+  final Value<double> plannedCarbsG;
+  final Value<double> plannedFatG;
+  final Value<double> servings;
+  final Value<int> sortOrder;
+  const MealSlotItemsCompanion({
+    this.id = const Value.absent(),
+    this.mealSlotId = const Value.absent(),
+    this.dishId = const Value.absent(),
+    this.plannedCostCents = const Value.absent(),
+    this.plannedCalories = const Value.absent(),
+    this.plannedProteinG = const Value.absent(),
+    this.plannedCarbsG = const Value.absent(),
+    this.plannedFatG = const Value.absent(),
+    this.servings = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+  });
+  MealSlotItemsCompanion.insert({
+    this.id = const Value.absent(),
+    required int mealSlotId,
+    required int dishId,
+    required int plannedCostCents,
+    this.plannedCalories = const Value.absent(),
+    this.plannedProteinG = const Value.absent(),
+    this.plannedCarbsG = const Value.absent(),
+    this.plannedFatG = const Value.absent(),
+    this.servings = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+  }) : mealSlotId = Value(mealSlotId),
+       dishId = Value(dishId),
+       plannedCostCents = Value(plannedCostCents);
+  static Insertable<MealSlotItem> custom({
+    Expression<int>? id,
+    Expression<int>? mealSlotId,
+    Expression<int>? dishId,
+    Expression<int>? plannedCostCents,
+    Expression<double>? plannedCalories,
+    Expression<double>? plannedProteinG,
+    Expression<double>? plannedCarbsG,
+    Expression<double>? plannedFatG,
+    Expression<double>? servings,
+    Expression<int>? sortOrder,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (mealSlotId != null) 'meal_slot_id': mealSlotId,
+      if (dishId != null) 'dish_id': dishId,
+      if (plannedCostCents != null) 'planned_cost_cents': plannedCostCents,
+      if (plannedCalories != null) 'planned_calories': plannedCalories,
+      if (plannedProteinG != null) 'planned_protein_g': plannedProteinG,
+      if (plannedCarbsG != null) 'planned_carbs_g': plannedCarbsG,
+      if (plannedFatG != null) 'planned_fat_g': plannedFatG,
+      if (servings != null) 'servings': servings,
+      if (sortOrder != null) 'sort_order': sortOrder,
+    });
+  }
+
+  MealSlotItemsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? mealSlotId,
+    Value<int>? dishId,
+    Value<int>? plannedCostCents,
+    Value<double>? plannedCalories,
+    Value<double>? plannedProteinG,
+    Value<double>? plannedCarbsG,
+    Value<double>? plannedFatG,
+    Value<double>? servings,
+    Value<int>? sortOrder,
+  }) {
+    return MealSlotItemsCompanion(
+      id: id ?? this.id,
+      mealSlotId: mealSlotId ?? this.mealSlotId,
+      dishId: dishId ?? this.dishId,
+      plannedCostCents: plannedCostCents ?? this.plannedCostCents,
+      plannedCalories: plannedCalories ?? this.plannedCalories,
+      plannedProteinG: plannedProteinG ?? this.plannedProteinG,
+      plannedCarbsG: plannedCarbsG ?? this.plannedCarbsG,
+      plannedFatG: plannedFatG ?? this.plannedFatG,
+      servings: servings ?? this.servings,
+      sortOrder: sortOrder ?? this.sortOrder,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (mealSlotId.present) {
+      map['meal_slot_id'] = Variable<int>(mealSlotId.value);
+    }
+    if (dishId.present) {
+      map['dish_id'] = Variable<int>(dishId.value);
+    }
+    if (plannedCostCents.present) {
+      map['planned_cost_cents'] = Variable<int>(plannedCostCents.value);
+    }
+    if (plannedCalories.present) {
+      map['planned_calories'] = Variable<double>(plannedCalories.value);
+    }
+    if (plannedProteinG.present) {
+      map['planned_protein_g'] = Variable<double>(plannedProteinG.value);
+    }
+    if (plannedCarbsG.present) {
+      map['planned_carbs_g'] = Variable<double>(plannedCarbsG.value);
+    }
+    if (plannedFatG.present) {
+      map['planned_fat_g'] = Variable<double>(plannedFatG.value);
+    }
+    if (servings.present) {
+      map['servings'] = Variable<double>(servings.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MealSlotItemsCompanion(')
+          ..write('id: $id, ')
+          ..write('mealSlotId: $mealSlotId, ')
+          ..write('dishId: $dishId, ')
+          ..write('plannedCostCents: $plannedCostCents, ')
+          ..write('plannedCalories: $plannedCalories, ')
+          ..write('plannedProteinG: $plannedProteinG, ')
+          ..write('plannedCarbsG: $plannedCarbsG, ')
+          ..write('plannedFatG: $plannedFatG, ')
+          ..write('servings: $servings, ')
+          ..write('sortOrder: $sortOrder')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $SyncQueueTable extends SyncQueue
     with TableInfo<$SyncQueueTable, SyncQueueData> {
   @override
@@ -5630,6 +6301,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   );
   late final $GeneratedPlansTable generatedPlans = $GeneratedPlansTable(this);
   late final $MealSlotsTable mealSlots = $MealSlotsTable(this);
+  late final $MealSlotItemsTable mealSlotItems = $MealSlotItemsTable(this);
   late final $SyncQueueTable syncQueue = $SyncQueueTable(this);
   late final $BudgetEntriesTable budgetEntries = $BudgetEntriesTable(this);
   @override
@@ -5645,6 +6317,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     dishAllergenTags,
     generatedPlans,
     mealSlots,
+    mealSlotItems,
     syncQueue,
     budgetEntries,
   ];
@@ -5701,6 +6374,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
+        'meal_slots',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('meal_slot_items', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
         'user_profiles',
         limitUpdateKind: UpdateKind.delete,
       ),
@@ -5731,6 +6411,7 @@ typedef $$UserProfilesTableCreateCompanionBuilder =
       Value<int> weeklyBudgetCents,
       Value<String> activeDays,
       Value<int> mealsPerDay,
+      Value<String> mealTimesJson,
       Value<double?> weightKg,
       Value<double?> heightCm,
       Value<int?> age,
@@ -5748,6 +6429,7 @@ typedef $$UserProfilesTableUpdateCompanionBuilder =
       Value<int> weeklyBudgetCents,
       Value<String> activeDays,
       Value<int> mealsPerDay,
+      Value<String> mealTimesJson,
       Value<double?> weightKg,
       Value<double?> heightCm,
       Value<int?> age,
@@ -5872,6 +6554,11 @@ class $$UserProfilesTableFilterComposer
 
   ColumnFilters<int> get mealsPerDay => $composableBuilder(
     column: $table.mealsPerDay,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get mealTimesJson => $composableBuilder(
+    column: $table.mealTimesJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6055,6 +6742,11 @@ class $$UserProfilesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get mealTimesJson => $composableBuilder(
+    column: $table.mealTimesJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<double> get weightKg => $composableBuilder(
     column: $table.weightKg,
     builder: (column) => ColumnOrderings(column),
@@ -6128,6 +6820,11 @@ class $$UserProfilesTableAnnotationComposer
 
   GeneratedColumn<int> get mealsPerDay => $composableBuilder(
     column: $table.mealsPerDay,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get mealTimesJson => $composableBuilder(
+    column: $table.mealTimesJson,
     builder: (column) => column,
   );
 
@@ -6299,6 +6996,7 @@ class $$UserProfilesTableTableManager
                 Value<int> weeklyBudgetCents = const Value.absent(),
                 Value<String> activeDays = const Value.absent(),
                 Value<int> mealsPerDay = const Value.absent(),
+                Value<String> mealTimesJson = const Value.absent(),
                 Value<double?> weightKg = const Value.absent(),
                 Value<double?> heightCm = const Value.absent(),
                 Value<int?> age = const Value.absent(),
@@ -6314,6 +7012,7 @@ class $$UserProfilesTableTableManager
                 weeklyBudgetCents: weeklyBudgetCents,
                 activeDays: activeDays,
                 mealsPerDay: mealsPerDay,
+                mealTimesJson: mealTimesJson,
                 weightKg: weightKg,
                 heightCm: heightCm,
                 age: age,
@@ -6331,6 +7030,7 @@ class $$UserProfilesTableTableManager
                 Value<int> weeklyBudgetCents = const Value.absent(),
                 Value<String> activeDays = const Value.absent(),
                 Value<int> mealsPerDay = const Value.absent(),
+                Value<String> mealTimesJson = const Value.absent(),
                 Value<double?> weightKg = const Value.absent(),
                 Value<double?> heightCm = const Value.absent(),
                 Value<int?> age = const Value.absent(),
@@ -6346,6 +7046,7 @@ class $$UserProfilesTableTableManager
                 weeklyBudgetCents: weeklyBudgetCents,
                 activeDays: activeDays,
                 mealsPerDay: mealsPerDay,
+                mealTimesJson: mealTimesJson,
                 weightKg: weightKg,
                 heightCm: heightCm,
                 age: age,
@@ -6593,6 +7294,24 @@ final class $$DishesTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
+
+  static MultiTypedResultKey<$MealSlotItemsTable, List<MealSlotItem>>
+  _mealSlotItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.mealSlotItems,
+    aliasName: 'dishes__id__meal_slot_items__dish_id',
+  );
+
+  $$MealSlotItemsTableProcessedTableManager get mealSlotItemsRefs {
+    final manager = $$MealSlotItemsTableTableManager(
+      $_db,
+      $_db.mealSlotItems,
+    ).filter((f) => f.dishId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_mealSlotItemsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$DishesTableFilterComposer
@@ -6738,6 +7457,31 @@ class $$DishesTableFilterComposer
           }) => $$MealSlotsTableFilterComposer(
             $db: $db,
             $table: $db.mealSlots,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> mealSlotItemsRefs(
+    Expression<bool> Function($$MealSlotItemsTableFilterComposer f) f,
+  ) {
+    final $$MealSlotItemsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.mealSlotItems,
+      getReferencedColumn: (t) => t.dishId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MealSlotItemsTableFilterComposer(
+            $db: $db,
+            $table: $db.mealSlotItems,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -6963,6 +7707,31 @@ class $$DishesTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> mealSlotItemsRefs<T extends Object>(
+    Expression<T> Function($$MealSlotItemsTableAnnotationComposer a) f,
+  ) {
+    final $$MealSlotItemsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.mealSlotItems,
+      getReferencedColumn: (t) => t.dishId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MealSlotItemsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.mealSlotItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$DishesTableTableManager
@@ -6983,6 +7752,7 @@ class $$DishesTableTableManager
             bool ingredientsRefs,
             bool dishAllergenTagsRefs,
             bool mealSlotsRefs,
+            bool mealSlotItemsRefs,
           })
         > {
   $$DishesTableTableManager(_$AppDatabase db, $DishesTable table)
@@ -7058,6 +7828,7 @@ class $$DishesTableTableManager
                 ingredientsRefs = false,
                 dishAllergenTagsRefs = false,
                 mealSlotsRefs = false,
+                mealSlotItemsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -7065,6 +7836,7 @@ class $$DishesTableTableManager
                     if (ingredientsRefs) db.ingredients,
                     if (dishAllergenTagsRefs) db.dishAllergenTags,
                     if (mealSlotsRefs) db.mealSlots,
+                    if (mealSlotItemsRefs) db.mealSlotItems,
                   ],
                   addJoins:
                       <
@@ -7161,6 +7933,27 @@ class $$DishesTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (mealSlotItemsRefs)
+                        await $_getPrefetchedData<
+                          Dishe,
+                          $DishesTable,
+                          MealSlotItem
+                        >(
+                          currentTable: table,
+                          referencedTable: $$DishesTableReferences
+                              ._mealSlotItemsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$DishesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).mealSlotItemsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.dishId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -7186,6 +7979,7 @@ typedef $$DishesTableProcessedTableManager =
         bool ingredientsRefs,
         bool dishAllergenTagsRefs,
         bool mealSlotsRefs,
+        bool mealSlotItemsRefs,
       })
     >;
 typedef $$IngredientsTableCreateCompanionBuilder =
@@ -9299,6 +10093,24 @@ final class $$MealSlotsTableReferences
     );
   }
 
+  static MultiTypedResultKey<$MealSlotItemsTable, List<MealSlotItem>>
+  _mealSlotItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.mealSlotItems,
+    aliasName: 'meal_slots__id__meal_slot_items__meal_slot_id',
+  );
+
+  $$MealSlotItemsTableProcessedTableManager get mealSlotItemsRefs {
+    final manager = $$MealSlotItemsTableTableManager(
+      $_db,
+      $_db.mealSlotItems,
+    ).filter((f) => f.mealSlotId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_mealSlotItemsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$BudgetEntriesTable, List<BudgetEntry>>
   _budgetEntriesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.budgetEntries,
@@ -9436,6 +10248,31 @@ class $$MealSlotsTableFilterComposer
           ),
     );
     return composer;
+  }
+
+  Expression<bool> mealSlotItemsRefs(
+    Expression<bool> Function($$MealSlotItemsTableFilterComposer f) f,
+  ) {
+    final $$MealSlotItemsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.mealSlotItems,
+      getReferencedColumn: (t) => t.mealSlotId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MealSlotItemsTableFilterComposer(
+            $db: $db,
+            $table: $db.mealSlotItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
   }
 
   Expression<bool> budgetEntriesRefs(
@@ -9697,6 +10534,31 @@ class $$MealSlotsTableAnnotationComposer
     return composer;
   }
 
+  Expression<T> mealSlotItemsRefs<T extends Object>(
+    Expression<T> Function($$MealSlotItemsTableAnnotationComposer a) f,
+  ) {
+    final $$MealSlotItemsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.mealSlotItems,
+      getReferencedColumn: (t) => t.mealSlotId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MealSlotItemsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.mealSlotItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> budgetEntriesRefs<T extends Object>(
     Expression<T> Function($$BudgetEntriesTableAnnotationComposer a) f,
   ) {
@@ -9739,6 +10601,7 @@ class $$MealSlotsTableTableManager
           PrefetchHooks Function({
             bool generatedPlanId,
             bool dishId,
+            bool mealSlotItemsRefs,
             bool budgetEntriesRefs,
           })
         > {
@@ -9833,11 +10696,13 @@ class $$MealSlotsTableTableManager
               ({
                 generatedPlanId = false,
                 dishId = false,
+                mealSlotItemsRefs = false,
                 budgetEntriesRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
+                    if (mealSlotItemsRefs) db.mealSlotItems,
                     if (budgetEntriesRefs) db.budgetEntries,
                   ],
                   addJoins:
@@ -9883,6 +10748,27 @@ class $$MealSlotsTableTableManager
                       },
                   getPrefetchedDataCallback: (items) async {
                     return [
+                      if (mealSlotItemsRefs)
+                        await $_getPrefetchedData<
+                          MealSlot,
+                          $MealSlotsTable,
+                          MealSlotItem
+                        >(
+                          currentTable: table,
+                          referencedTable: $$MealSlotsTableReferences
+                              ._mealSlotItemsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$MealSlotsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).mealSlotItemsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.mealSlotId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (budgetEntriesRefs)
                         await $_getPrefetchedData<
                           MealSlot,
@@ -9927,8 +10813,511 @@ typedef $$MealSlotsTableProcessedTableManager =
       PrefetchHooks Function({
         bool generatedPlanId,
         bool dishId,
+        bool mealSlotItemsRefs,
         bool budgetEntriesRefs,
       })
+    >;
+typedef $$MealSlotItemsTableCreateCompanionBuilder =
+    MealSlotItemsCompanion Function({
+      Value<int> id,
+      required int mealSlotId,
+      required int dishId,
+      required int plannedCostCents,
+      Value<double> plannedCalories,
+      Value<double> plannedProteinG,
+      Value<double> plannedCarbsG,
+      Value<double> plannedFatG,
+      Value<double> servings,
+      Value<int> sortOrder,
+    });
+typedef $$MealSlotItemsTableUpdateCompanionBuilder =
+    MealSlotItemsCompanion Function({
+      Value<int> id,
+      Value<int> mealSlotId,
+      Value<int> dishId,
+      Value<int> plannedCostCents,
+      Value<double> plannedCalories,
+      Value<double> plannedProteinG,
+      Value<double> plannedCarbsG,
+      Value<double> plannedFatG,
+      Value<double> servings,
+      Value<int> sortOrder,
+    });
+
+final class $$MealSlotItemsTableReferences
+    extends BaseReferences<_$AppDatabase, $MealSlotItemsTable, MealSlotItem> {
+  $$MealSlotItemsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $MealSlotsTable _mealSlotIdTable(_$AppDatabase db) =>
+      db.mealSlots.createAlias('meal_slot_items__meal_slot_id__meal_slots__id');
+
+  $$MealSlotsTableProcessedTableManager get mealSlotId {
+    final $_column = $_itemColumn<int>('meal_slot_id')!;
+
+    final manager = $$MealSlotsTableTableManager(
+      $_db,
+      $_db.mealSlots,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_mealSlotIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $DishesTable _dishIdTable(_$AppDatabase db) =>
+      db.dishes.createAlias('meal_slot_items__dish_id__dishes__id');
+
+  $$DishesTableProcessedTableManager get dishId {
+    final $_column = $_itemColumn<int>('dish_id')!;
+
+    final manager = $$DishesTableTableManager(
+      $_db,
+      $_db.dishes,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_dishIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$MealSlotItemsTableFilterComposer
+    extends Composer<_$AppDatabase, $MealSlotItemsTable> {
+  $$MealSlotItemsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get plannedCostCents => $composableBuilder(
+    column: $table.plannedCostCents,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get plannedCalories => $composableBuilder(
+    column: $table.plannedCalories,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get plannedProteinG => $composableBuilder(
+    column: $table.plannedProteinG,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get plannedCarbsG => $composableBuilder(
+    column: $table.plannedCarbsG,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get plannedFatG => $composableBuilder(
+    column: $table.plannedFatG,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get servings => $composableBuilder(
+    column: $table.servings,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$MealSlotsTableFilterComposer get mealSlotId {
+    final $$MealSlotsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.mealSlotId,
+      referencedTable: $db.mealSlots,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MealSlotsTableFilterComposer(
+            $db: $db,
+            $table: $db.mealSlots,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$DishesTableFilterComposer get dishId {
+    final $$DishesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.dishId,
+      referencedTable: $db.dishes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DishesTableFilterComposer(
+            $db: $db,
+            $table: $db.dishes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$MealSlotItemsTableOrderingComposer
+    extends Composer<_$AppDatabase, $MealSlotItemsTable> {
+  $$MealSlotItemsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get plannedCostCents => $composableBuilder(
+    column: $table.plannedCostCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get plannedCalories => $composableBuilder(
+    column: $table.plannedCalories,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get plannedProteinG => $composableBuilder(
+    column: $table.plannedProteinG,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get plannedCarbsG => $composableBuilder(
+    column: $table.plannedCarbsG,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get plannedFatG => $composableBuilder(
+    column: $table.plannedFatG,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get servings => $composableBuilder(
+    column: $table.servings,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$MealSlotsTableOrderingComposer get mealSlotId {
+    final $$MealSlotsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.mealSlotId,
+      referencedTable: $db.mealSlots,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MealSlotsTableOrderingComposer(
+            $db: $db,
+            $table: $db.mealSlots,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$DishesTableOrderingComposer get dishId {
+    final $$DishesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.dishId,
+      referencedTable: $db.dishes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DishesTableOrderingComposer(
+            $db: $db,
+            $table: $db.dishes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$MealSlotItemsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $MealSlotItemsTable> {
+  $$MealSlotItemsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get plannedCostCents => $composableBuilder(
+    column: $table.plannedCostCents,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get plannedCalories => $composableBuilder(
+    column: $table.plannedCalories,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get plannedProteinG => $composableBuilder(
+    column: $table.plannedProteinG,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get plannedCarbsG => $composableBuilder(
+    column: $table.plannedCarbsG,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get plannedFatG => $composableBuilder(
+    column: $table.plannedFatG,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get servings =>
+      $composableBuilder(column: $table.servings, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  $$MealSlotsTableAnnotationComposer get mealSlotId {
+    final $$MealSlotsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.mealSlotId,
+      referencedTable: $db.mealSlots,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MealSlotsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.mealSlots,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$DishesTableAnnotationComposer get dishId {
+    final $$DishesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.dishId,
+      referencedTable: $db.dishes,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DishesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.dishes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$MealSlotItemsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $MealSlotItemsTable,
+          MealSlotItem,
+          $$MealSlotItemsTableFilterComposer,
+          $$MealSlotItemsTableOrderingComposer,
+          $$MealSlotItemsTableAnnotationComposer,
+          $$MealSlotItemsTableCreateCompanionBuilder,
+          $$MealSlotItemsTableUpdateCompanionBuilder,
+          (MealSlotItem, $$MealSlotItemsTableReferences),
+          MealSlotItem,
+          PrefetchHooks Function({bool mealSlotId, bool dishId})
+        > {
+  $$MealSlotItemsTableTableManager(_$AppDatabase db, $MealSlotItemsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MealSlotItemsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$MealSlotItemsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$MealSlotItemsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> mealSlotId = const Value.absent(),
+                Value<int> dishId = const Value.absent(),
+                Value<int> plannedCostCents = const Value.absent(),
+                Value<double> plannedCalories = const Value.absent(),
+                Value<double> plannedProteinG = const Value.absent(),
+                Value<double> plannedCarbsG = const Value.absent(),
+                Value<double> plannedFatG = const Value.absent(),
+                Value<double> servings = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+              }) => MealSlotItemsCompanion(
+                id: id,
+                mealSlotId: mealSlotId,
+                dishId: dishId,
+                plannedCostCents: plannedCostCents,
+                plannedCalories: plannedCalories,
+                plannedProteinG: plannedProteinG,
+                plannedCarbsG: plannedCarbsG,
+                plannedFatG: plannedFatG,
+                servings: servings,
+                sortOrder: sortOrder,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int mealSlotId,
+                required int dishId,
+                required int plannedCostCents,
+                Value<double> plannedCalories = const Value.absent(),
+                Value<double> plannedProteinG = const Value.absent(),
+                Value<double> plannedCarbsG = const Value.absent(),
+                Value<double> plannedFatG = const Value.absent(),
+                Value<double> servings = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+              }) => MealSlotItemsCompanion.insert(
+                id: id,
+                mealSlotId: mealSlotId,
+                dishId: dishId,
+                plannedCostCents: plannedCostCents,
+                plannedCalories: plannedCalories,
+                plannedProteinG: plannedProteinG,
+                plannedCarbsG: plannedCarbsG,
+                plannedFatG: plannedFatG,
+                servings: servings,
+                sortOrder: sortOrder,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$MealSlotItemsTable, MealSlotItem>(table),
+                  $$MealSlotItemsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({mealSlotId = false, dishId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (mealSlotId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.mealSlotId,
+                        referencedTable: $$MealSlotItemsTableReferences
+                            ._mealSlotIdTable(db),
+                        referencedColumn: $$MealSlotItemsTableReferences
+                            ._mealSlotIdTable(db)
+                            .id,
+                      ) as T;
+                    }
+                    if (dishId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.dishId,
+                        referencedTable: $$MealSlotItemsTableReferences
+                            ._dishIdTable(db),
+                        referencedColumn: $$MealSlotItemsTableReferences
+                            ._dishIdTable(db)
+                            .id,
+                      ) as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$MealSlotItemsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $MealSlotItemsTable,
+      MealSlotItem,
+      $$MealSlotItemsTableFilterComposer,
+      $$MealSlotItemsTableOrderingComposer,
+      $$MealSlotItemsTableAnnotationComposer,
+      $$MealSlotItemsTableCreateCompanionBuilder,
+      $$MealSlotItemsTableUpdateCompanionBuilder,
+      (MealSlotItem, $$MealSlotItemsTableReferences),
+      MealSlotItem,
+      PrefetchHooks Function({bool mealSlotId, bool dishId})
     >;
 typedef $$SyncQueueTableCreateCompanionBuilder = SyncQueueCompanion Function({
   Value<int> id,
@@ -10769,6 +12158,8 @@ class $AppDatabaseManager {
       $$GeneratedPlansTableTableManager(_db, _db.generatedPlans);
   $$MealSlotsTableTableManager get mealSlots =>
       $$MealSlotsTableTableManager(_db, _db.mealSlots);
+  $$MealSlotItemsTableTableManager get mealSlotItems =>
+      $$MealSlotItemsTableTableManager(_db, _db.mealSlotItems);
   $$SyncQueueTableTableManager get syncQueue =>
       $$SyncQueueTableTableManager(_db, _db.syncQueue);
   $$BudgetEntriesTableTableManager get budgetEntries =>

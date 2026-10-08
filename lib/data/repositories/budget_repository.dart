@@ -87,6 +87,22 @@ class BudgetRepository {
         'meal_slot_id': mealSlotId,
       },
     );
+    final slot = await (_database.select(
+      _database.mealSlots,
+    )..where((row) => row.id.equals(mealSlotId))).getSingleOrNull();
+    if (slot != null) {
+      final plan = await (_database.select(
+        _database.generatedPlans,
+      )..where((row) => row.id.equals(slot.generatedPlanId))).getSingleOrNull();
+      if (plan != null) {
+        await MealPlanRepository(_database).updateMealSlot(
+          profileId: plan.userProfileId,
+          slotId: mealSlotId,
+          mealStatus: 'planned',
+          consumedAt: null,
+        );
+      }
+    }
   }
 
   Future<void> updateEntry({
@@ -119,6 +135,38 @@ class BudgetRepository {
         'meal_slot_id': mealSlotId,
       },
     );
+    if (entry.mealSlotId != null && mealSlotId != null) {
+      final slot = await (_database.select(
+        _database.mealSlots,
+      )..where((row) => row.id.equals(entry.mealSlotId!))).getSingleOrNull();
+      if (slot != null && slot.mealStatus != 'skipped') {
+        await MealPlanRepository(_database).updateMealSlot(
+          profileId: entry.userProfileId,
+          slotId: slot.id,
+          mealStatus: slot.mealStatus == 'planned' ? 'eaten' : slot.mealStatus,
+          consumedAt: slot.consumedAt ?? occurredAt,
+          actualCostCents: amountCents,
+          substituteName: slot.substituteName,
+        );
+      }
+    } else if (entry.mealSlotId != null && mealSlotId == null) {
+      final slot = await (_database.select(
+        _database.mealSlots,
+      )..where((row) => row.id.equals(entry.mealSlotId!))).getSingleOrNull();
+      final plan = slot == null
+          ? null
+          : await (_database.select(_database.generatedPlans)
+                  ..where((row) => row.id.equals(slot.generatedPlanId)))
+                .getSingleOrNull();
+      if (slot != null && plan != null) {
+        await MealPlanRepository(_database).updateMealSlot(
+          profileId: plan.userProfileId,
+          slotId: slot.id,
+          mealStatus: 'planned',
+          consumedAt: null,
+        );
+      }
+    }
   }
 
   void _validateEntry(int amountCents, String label) {

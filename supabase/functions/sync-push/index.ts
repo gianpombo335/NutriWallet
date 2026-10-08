@@ -135,6 +135,44 @@ Deno.serve(async (request) => {
   }
 
   if (
+    body.entity_table === 'UserProfiles' &&
+    body.payload?.meal_times_json
+  ) {
+    const profileResponse = await restRequest('rpc/apply_user_profile_schedule', {
+      method: 'POST',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({
+        p_user_id: userId,
+        p_entity_id: body.entity_id,
+        p_operation: body.operation,
+        p_payload: body.payload,
+        p_updated_at: body.updated_at,
+      }),
+    });
+    if (!profileResponse.ok) return response({ error: 'Profile write failed' }, 502);
+    return response(await rpcResult(profileResponse));
+  }
+
+  if (
+    body.entity_table === 'MealSlots' &&
+    Array.isArray(body.payload?.components)
+  ) {
+    const componentResponse = await restRequest('rpc/apply_meal_slot_components', {
+      method: 'POST',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({
+        p_user_id: userId,
+        p_entity_id: body.entity_id,
+        p_operation: body.operation,
+        p_payload: body.payload,
+        p_updated_at: body.updated_at,
+      }),
+    });
+    if (!componentResponse.ok) return response({ error: 'Meal component write failed' }, 502);
+    return response(await rpcResult(componentResponse));
+  }
+
+  if (
     body.entity_table === 'GeneratedPlans' &&
     body.payload?.planning_focus
   ) {

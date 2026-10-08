@@ -20,6 +20,7 @@ Map<String, dynamic> userProfileSyncPayload(UserProfile profile) => {
   'weekly_budget_cents': profile.weeklyBudgetCents,
   'active_days': profile.activeDays,
   'meals_per_day': profile.mealsPerDay,
+  'meal_times_json': profile.mealTimesJson,
   'weight_kg': profile.weightKg,
   'height_cm': profile.heightCm,
   'age': profile.age,

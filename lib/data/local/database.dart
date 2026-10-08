@@ -15,6 +15,8 @@ class UserProfiles extends Table {
   TextColumn get activeDays =>
       text().withDefault(const Constant('1,2,3,4,5,6,7'))();
   IntColumn get mealsPerDay => integer().withDefault(const Constant(3))();
+  TextColumn get mealTimesJson =>
+      text().withDefault(const Constant('[480,780,1140]'))();
   RealColumn get weightKg => real().nullable()();
   RealColumn get heightCm => real().nullable()();
   IntColumn get age => integer().nullable()();
@@ -121,6 +123,20 @@ class MealSlots extends Table {
   DateTimeColumn get consumedAt => dateTime().nullable()();
 }
 
+class MealSlotItems extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get mealSlotId =>
+      integer().references(MealSlots, #id, onDelete: KeyAction.cascade)();
+  IntColumn get dishId => integer().references(Dishes, #id)();
+  IntColumn get plannedCostCents => integer()();
+  RealColumn get plannedCalories => real().withDefault(const Constant(0))();
+  RealColumn get plannedProteinG => real().withDefault(const Constant(0))();
+  RealColumn get plannedCarbsG => real().withDefault(const Constant(0))();
+  RealColumn get plannedFatG => real().withDefault(const Constant(0))();
+  RealColumn get servings => real().withDefault(const Constant(1))();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+}
+
 class SyncQueue extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get entityTable => text()();
@@ -162,6 +178,7 @@ class BudgetEntries extends Table {
     DishAllergenTags,
     GeneratedPlans,
     MealSlots,
+    MealSlotItems,
     SyncQueue,
     BudgetEntries,
   ],
@@ -194,7 +211,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -230,6 +247,34 @@ class AppDatabase extends _$AppDatabase {
         await m.addColumn(mealSlots, mealSlots.plannedCarbsG);
         await m.addColumn(mealSlots, mealSlots.plannedFatG);
         await m.addColumn(mealSlots, mealSlots.servings);
+      }
+      if (from < 9) {
+        await m.addColumn(userProfiles, userProfiles.mealTimesJson);
+        await m.createTable(mealSlotItems);
+        await customStatement('''
+          INSERT INTO meal_slot_items(
+            meal_slot_id,
+            dish_id,
+            planned_cost_cents,
+            planned_calories,
+            planned_protein_g,
+            planned_carbs_g,
+            planned_fat_g,
+            servings,
+            sort_order
+          )
+          SELECT
+            id,
+            dish_id,
+            planned_cost_cents,
+            planned_calories,
+            planned_protein_g,
+            planned_carbs_g,
+            planned_fat_g,
+            servings,
+            0
+          FROM meal_slots
+        ''');
       }
     },
     beforeOpen: (details) async {

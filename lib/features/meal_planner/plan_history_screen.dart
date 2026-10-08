@@ -132,14 +132,37 @@ class PlanHistoryDetailScreen extends ConsumerWidget {
               const SizedBox(height: AppSpacing.section),
               Text('Meal slots', style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 8),
-              ...detail.slots.map(
-                (slot) => ListTile(
+              ...detail.slots.map((slot) {
+                final assignment = detail.assignments.firstWhere(
+                  (item) =>
+                      item.dayIndex == slot.dayIndex &&
+                      item.slotIndex == slot.slotIndex,
+                  orElse: () => MealSlotAssignment(
+                    dayIndex: slot.dayIndex,
+                    slotIndex: slot.slotIndex,
+                    dish: const PlannerDish(
+                      id: 0,
+                      name: 'Meal',
+                      price: 0,
+                      calories: 0,
+                      proteinG: 0,
+                      carbsG: 0,
+                      fatG: 0,
+                    ),
+                    reason: 'saved plan',
+                  ),
+                );
+                return ListTile(
                   leading: CircleAvatar(child: Text('${slot.dayIndex}')),
-                  title: Text('Meal ${slot.slotIndex + 1}'),
+                  title: Text(
+                    assignment.mealComponents
+                        .map((component) => component.dish.name)
+                        .join(' + '),
+                  ),
                   subtitle: Text('${slot.plannedCalories.round()} kcal'),
                   trailing: Text(currency.formatCents(slot.plannedCostCents)),
-                ),
-              ),
+                );
+              }),
             ],
           );
         },
@@ -156,6 +179,7 @@ class PlanHistoryDetailScreen extends ConsumerWidget {
     return _PlanDetail(
       plan: plan,
       slots: await repository.slotsForPlan(planId),
+      assignments: (await repository.loadMealPlan(plan)).assignments,
     );
   }
 
@@ -163,10 +187,15 @@ class PlanHistoryDetailScreen extends ConsumerWidget {
 }
 
 class _PlanDetail {
-  const _PlanDetail({required this.plan, required this.slots});
+  const _PlanDetail({
+    required this.plan,
+    required this.slots,
+    required this.assignments,
+  });
 
   final GeneratedPlan plan;
   final List<MealSlot> slots;
+  final List<MealSlotAssignment> assignments;
 }
 
 IconData _focusIcon(PlanningFocus focus) => switch (focus) {

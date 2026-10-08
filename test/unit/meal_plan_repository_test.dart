@@ -236,4 +236,91 @@ void main() {
     expect(loaded.assignments.single.nutrition.calories, 400);
     expect(loaded.totalCostCents, 500);
   });
+
+  test('meal slots can persist and edit multiple dish components', () async {
+    final database = AppDatabase();
+    addTearDown(database.close);
+    final profileId = await ProfileDao(database).save(
+      UserProfilesCompanion.insert(
+        email: 'components@example.com',
+        weeklyBudgetCents: const Value(2000),
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
+    final firstDishId = await DishDao(database).insertDish(
+      DishesCompanion.insert(
+        userProfileId: profileId,
+        name: 'Main dish',
+        priceCents: 500,
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
+    final secondDishId = await DishDao(database).insertDish(
+      DishesCompanion.insert(
+        userProfileId: profileId,
+        name: 'Side dish',
+        priceCents: 200,
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
+    final first = PlannerDish(
+      id: firstDishId,
+      name: 'Main dish',
+      price: 5,
+      calories: 400,
+      proteinG: 20,
+      carbsG: 40,
+      fatG: 10,
+    );
+    final second = PlannerDish(
+      id: secondDishId,
+      name: 'Side dish',
+      price: 2,
+      calories: 150,
+      proteinG: 5,
+      carbsG: 20,
+      fatG: 3,
+    );
+    final repository = MealPlanRepository(database);
+    final plan = await repository.savePlan(
+      profileId: profileId,
+      weekStartDate: DateTime.utc(2026, 1, 5),
+      plan: GeneratedMealPlan(
+        assignments: [
+          MealSlotAssignment(
+            dayIndex: 1,
+            slotIndex: 0,
+            dish: first,
+            reason: 'fit',
+            components: [
+              MealSlotComponent(dish: first),
+              MealSlotComponent(dish: second),
+            ],
+          ),
+        ],
+        totalCostCents: 700,
+        isOverBudget: false,
+      ),
+    );
+    final slot = (await repository.slotsForPlan(plan.id)).single;
+    expect(await (database.select(database.mealSlotItems)).get(), hasLength(2));
+
+    final loaded = await repository.loadMealPlan(plan);
+    expect(loaded.assignments.single.mealComponents, hasLength(2));
+    expect(loaded.assignments.single.plannedCostCents, 700);
+    expect(loaded.assignments.single.nutrition.calories, 550);
+
+    await repository.updateMealSlotComponents(
+      profileId: profileId,
+      planId: plan.id,
+      dayIndex: slot.dayIndex,
+      slotIndex: slot.slotIndex,
+      components: [MealSlotComponent(dish: first)],
+    );
+    expect(await (database.select(database.mealSlotItems)).get(), hasLength(1));
+    expect((await repository.findById(plan.id))?.totalProjectedCostCents, 500);
+  });
 }
